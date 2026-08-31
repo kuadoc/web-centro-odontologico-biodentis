@@ -3,6 +3,11 @@ packages:
   - "packages/*"
 
 allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  prisma: true
+  bcrypt: true
+  esbuild: true
+  msw: false
   sharp: true
   unrs-resolver: true
-  msw: false
