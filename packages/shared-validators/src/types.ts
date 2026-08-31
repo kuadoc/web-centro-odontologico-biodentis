@@ -1,0 +1,14 @@
+export enum Role {
+  PATIENT = "PATIENT",
+  RECEPTIONIST = "RECEPTIONIST",
+  DENTIST = "DENTIST",
+  ADMIN = "ADMIN",
+}
+
+export enum AppointmentStatus {
+  PENDING = "PENDING",
+  CONFIRMED = "CONFIRMED",
+  COMPLETED = "COMPLETED",
+  NO_SHOW = "NO_SHOW",
+  CANCELLED = "CANCELLED",
+}

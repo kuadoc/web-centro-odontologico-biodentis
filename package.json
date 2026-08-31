@@ -1,23 +1,23 @@
 {
-  "name": "web-centro-odontologico-biodentis",
+  "name": "next-monorepo",
+  "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"pnpm --filter @biodentis/backend dev\" \"pnpm --filter @biodentis/web dev\"",
-    "dev:backend": "pnpm --filter @biodentis/backend dev",
-    "dev:web": "pnpm --filter @biodentis/web dev",
     "build": "turbo build",
+    "dev": "turbo dev",
     "lint": "turbo lint",
-    "db:generate": "turbo db:generate --filter=backend",
-    "db:push": "turbo db:push --filter=backend",
-    "db:migrate": "turbo db:migrate --filter=backend",
-    "db:seed": "turbo db:seed --filter=backend",
-    "db:studio": "turbo db:studio --filter=backend"
+    "format": "turbo format",
+    "typecheck": "turbo typecheck"
   },
   "devDependencies": {
-    "concurrently": "^10.0.5",
-    "turbo": "^2.4.0"
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "prettier": "^3.8.3",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "turbo": "^2.9.18",
+    "typescript": "^5"
   },
-  "packageManager": "pnpm@11.6.0",
+  "packageManager": "pnpm@10.33.4",
   "engines": {
     "node": ">=20"
   }
