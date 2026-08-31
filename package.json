@@ -1,0 +1,24 @@
+{
+  "name": "web-centro-odontologico-biodentis",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @biodentis/backend dev\" \"pnpm --filter @biodentis/web dev\"",
+    "dev:backend": "pnpm --filter @biodentis/backend dev",
+    "dev:web": "pnpm --filter @biodentis/web dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "db:generate": "turbo db:generate --filter=backend",
+    "db:push": "turbo db:push --filter=backend",
+    "db:migrate": "turbo db:migrate --filter=backend",
+    "db:seed": "turbo db:seed --filter=backend",
+    "db:studio": "turbo db:studio --filter=backend"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "turbo": "^2.4.0"
+  },
+  "packageManager": "pnpm@11.6.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

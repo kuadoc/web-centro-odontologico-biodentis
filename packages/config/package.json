@@ -1,0 +1,10 @@
+{
+  "name": "@biodentis/config",
+  "version": "0.1.0",
+  "private": true,
+  "files": [
+    "tsconfig.base.json",
+    ".eslintrc.js",
+    ".prettierrc"
+  ]
+}

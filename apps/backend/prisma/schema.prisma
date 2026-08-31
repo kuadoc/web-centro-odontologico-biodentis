@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PATIENT
+  RECEPTIONIST
+  DENTIST
+  ADMIN
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         Role
+  firstName    String
+  lastName     String
+  phone        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  dentistProfile    Dentist?
+  clinicalRecords   ClinicalRecord[] @relation("PatientRecords")
+  appointments      Appointment[]
+
+  @@map("users")
+}
+
+model Dentist {
+  id        String @id @default(uuid())
+  userId    String @unique
+  specialty String
+
+  user                User                 @relation(fields: [userId], references: [id])
+  availability        Availability[]
+  scheduleExceptions  ScheduleException[]
+  appointments        Appointment[]
+  clinicalRecords     ClinicalRecord[]     @relation("DentistRecords")
+
+  @@map("dentists")
+}
+
+model Availability {
+  id        String @id @default(uuid())
+  dentistId String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+
+  dentist Dentist @relation(fields: [dentistId], references: [id])
+
+  @@unique([dentistId, dayOfWeek])
+  @@map("availability")
+}
+
+model ScheduleException {
+  id        String   @id @default(uuid())
+  dentistId String
+  date      DateTime @db.Date
+  reason    String?
+
+  dentist Dentist @relation(fields: [dentistId], references: [id])
+
+  @@unique([dentistId, date])
+  @@map("schedule_exceptions")
+}
+
+model Appointment {
+  id        String            @id @default(uuid())
+  patientId String
+  dentistId String
+  date      DateTime          @db.Date
+  startTime String
+  endTime   String
+  status    AppointmentStatus @default(PENDING)
+  notes     String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  patient        User             @relation(fields: [patientId], references: [id])
+  dentist        Dentist          @relation(fields: [dentistId], references: [id])
+  clinicalRecord ClinicalRecord?
+
+  @@unique([dentistId, date, startTime])
+  @@map("appointments")
+}
+
+model ClinicalRecord {
+  id            String   @id @default(uuid())
+  patientId     String
+  dentistId     String
+  appointmentId String   @unique
+  notes         String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  patient     User        @relation("PatientRecords", fields: [patientId], references: [id])
+  dentist     Dentist     @relation("DentistRecords", fields: [dentistId], references: [id])
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@map("clinical_records")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  userId       String
+  action       String
+  resourceType String
+  resourceId   String
+  details      String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
+}
+
+model Clinic {
+  id           String @id @default(uuid())
+  name         String
+  address      String?
+  phone        String?
+  generalHours String?
+
+  @@map("clinic")
+}
