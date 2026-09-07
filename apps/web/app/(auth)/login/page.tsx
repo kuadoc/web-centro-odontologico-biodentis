@@ -7,11 +7,11 @@ import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { useAuthContext } from "@/contexts/auth-context";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuthContext();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");

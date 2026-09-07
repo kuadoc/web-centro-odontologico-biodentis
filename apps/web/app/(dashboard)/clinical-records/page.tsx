@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { useAuthContext } from "@/contexts/auth-context";
+import { useAuth } from "@/hooks/use-auth";
+import { useAppointments } from "@/hooks/use-queries";
 import { FileText, Calendar } from "lucide-react";
 
 interface ClinicalRecord {
@@ -15,30 +16,23 @@ interface ClinicalRecord {
 }
 
 export default function ClinicalRecordsPage() {
-  const { api, user } = useAuthContext();
-  const [records, setRecords] = useState<ClinicalRecord[]>([]);
+  const { user } = useAuth();
+  const { data: appointmentsData, isLoading } = useAppointments();
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const appts = await api.get<Array<{
-          id: string;
-          patient?: { id: string; firstName: string; lastName: string };
-          clinicalRecord?: ClinicalRecord;
-        }>>("/api/appointments");
+  const records = useMemo(() => {
+    const appts = Array.isArray(appointmentsData) ? appointmentsData : [];
+    return appts
+      .filter((a) => (a as unknown as Record<string, unknown>).clinicalRecord)
+      .map((a) => (a as unknown as { clinicalRecord: ClinicalRecord }).clinicalRecord);
+  }, [appointmentsData]);
 
-        if (Array.isArray(appts)) {
-          const recordsWithNotes = appts
-            .filter((a) => a.clinicalRecord)
-            .map((a) => a.clinicalRecord as ClinicalRecord);
-          setRecords(recordsWithNotes);
-        }
-      } catch {
-        console.error("Error loading clinical records");
-      }
-    }
-    load();
-  }, [api]);
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <p className="text-muted-foreground">Cargando historial clínico...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

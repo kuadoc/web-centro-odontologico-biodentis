@@ -1,14 +1,25 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { AuthService } from "@/modules/auth/auth.service";
-import { handleApiError } from "@/lib/errors";
+import { handleApiError, AuthenticationError } from "@/lib/errors";
+import { setRefreshTokenCookie, getRefreshTokenFromCookie } from "@/lib/auth";
 
 const authService = new AuthService();
 
 export async function POST(request: NextRequest) {
   try {
-    const { refreshToken } = await request.json();
+    const refreshToken = getRefreshTokenFromCookie(request);
+
+    if (!refreshToken) {
+      throw new AuthenticationError("Refresh token no proporcionado");
+    }
+
     const result = await authService.refresh(refreshToken);
-    return Response.json(result);
+
+    const response = NextResponse.json({
+      accessToken: result.accessToken,
+    });
+
+    return setRefreshTokenCookie(response, result.refreshToken);
   } catch (error) {
     return handleApiError(error);
   }

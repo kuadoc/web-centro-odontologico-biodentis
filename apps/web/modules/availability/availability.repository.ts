@@ -11,8 +11,12 @@ export class AvailabilityRepository {
   }
 
   async findException(dentistId: string, date: Date) {
-    return prisma.scheduleException.findUnique({
-      where: { dentistId_date: { dentistId, date } },
+    return prisma.scheduleException.findFirst({
+      where: {
+        dentistId,
+        startDate: { lte: date },
+        endDate: { gte: date },
+      },
     });
   }
 
@@ -31,13 +35,13 @@ export class AvailabilityRepository {
     });
   }
 
-  async addException(dentistId: string, date: Date, reason?: string) {
+  async addException(dentistId: string, startDate: Date, endDate: Date, reason?: string) {
     return prisma.scheduleException.create({
-      data: { dentistId, date, reason },
+      data: { dentistId, startDate, endDate, reason },
     });
   }
 
-  async removeException(dentistId: string, date: Date) {
-    return prisma.scheduleException.deleteMany({ where: { dentistId, date } });
+  async removeException(dentistId: string, startDate: Date) {
+    return prisma.scheduleException.deleteMany({ where: { dentistId, startDate } });
   }
 }

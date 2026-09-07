@@ -1,32 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { Card, CardContent } from "@workspace/ui/components/card";
 import { Badge } from "@workspace/ui/components/badge";
-import { useAuthContext } from "@/contexts/auth-context";
+import { useDentists } from "@/hooks/use-queries";
 import { Stethoscope, Mail, Phone } from "lucide-react";
 
-interface Dentist {
-  id: string;
-  specialty: string;
-  user: { id: string; firstName: string; lastName: string; email: string; phone?: string };
-}
-
 export default function DentistsPage() {
-  const { api } = useAuthContext();
-  const [dentists, setDentists] = useState<Dentist[]>([]);
+  const { data: dentistsData, isLoading } = useDentists();
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const data = await api.get<Dentist[]>("/api/dentists");
-        setDentists(Array.isArray(data) ? data : []);
-      } catch {
-        console.error("Error loading dentists");
-      }
-    }
-    load();
-  }, [api]);
+  const dentists = useMemo(
+    () => (Array.isArray(dentistsData) ? dentistsData : []),
+    [dentistsData]
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <p className="text-muted-foreground">Cargando odontólogos...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -35,7 +29,7 @@ export default function DentistsPage() {
         <p className="text-muted-foreground">Equipo odontológico</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {dentists.length === 0 ? (
           <Card>
             <CardContent className="p-6">

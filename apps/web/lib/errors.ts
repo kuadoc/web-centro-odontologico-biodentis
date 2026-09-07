@@ -68,6 +68,11 @@ export function handleApiError(error: unknown): Response {
     return Response.json({ error: error.message }, { status: error.statusCode });
   }
 
+  // JWT errors from jsonwebtoken library
+  if (error instanceof Error && (error.name === "TokenExpiredError" || error.name === "JsonWebTokenError" || error.name === "NotBeforeError")) {
+    return Response.json({ error: "Sesión expirada" }, { status: 401 });
+  }
+
   console.error("Unhandled error:", error);
   return Response.json({ error: "Error interno del servidor" }, { status: 500 });
 }

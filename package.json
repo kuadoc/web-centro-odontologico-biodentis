@@ -7,7 +7,12 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "format": "turbo format",
-    "typecheck": "turbo typecheck"
+    "typecheck": "turbo typecheck",
+    "db:generate": "pnpm --filter web db:generate",
+    "db:push": "pnpm --filter web db:push",
+    "db:migrate": "pnpm --filter web db:migrate",
+    "db:seed": "pnpm --filter web db:seed",
+    "db:studio": "pnpm --filter web db:studio"
   },
   "devDependencies": {
     "@workspace/eslint-config": "workspace:*",

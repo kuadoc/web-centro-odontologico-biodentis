@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { ClinicService } from "@/modules/clinic/clinic.service";
-import { authenticate } from "@/lib/middleware";
-import { Role } from "@workspace/shared-validators";
+import { requireRole } from "@/lib/middleware";
+import { Role } from "@biodentis/shared-types";
 import { handleApiError } from "@/lib/errors";
 
 const clinicService = new ClinicService();
@@ -17,10 +17,7 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const user = authenticate(request);
-    if (user.role !== Role.ADMIN) {
-      return Response.json({ error: "Solo administradores pueden modificar la clínica" }, { status: 403 });
-    }
+    await requireRole(request, [Role.ADMIN]);
     const body = await request.json();
     const clinic = await clinicService.update(body);
     return Response.json(clinic);

@@ -1,13 +1,15 @@
 "use client";
 
-import { AuthProvider, useAuthContext } from "@/contexts/auth-context";
+import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { SidebarProvider, useSidebar } from "@/components/layout/sidebar-context";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuthContext();
+  const { user, isLoading } = useAuth();
+  const { isCollapsed } = useSidebar();
   const router = useRouter();
 
   useEffect(() => {
@@ -29,9 +31,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div
+        className="flex flex-1 flex-col transition-all duration-200 ease-in-out min-w-0"
+        style={{ marginLeft: 0 }}
+      >
         <Header />
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 max-w-[1400px] mx-auto w-full">{children}</main>
       </div>
     </div>
   );
@@ -40,7 +45,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
-      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+      <SidebarProvider>
+        <DashboardLayoutInner>{children}</DashboardLayoutInner>
+      </SidebarProvider>
     </AuthProvider>
   );
 }

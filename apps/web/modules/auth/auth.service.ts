@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
-import { RegisterSchema, LoginSchema } from "@workspace/shared-validators";
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken, TokenPayload } from "@/lib/auth";
+import { RegisterSchema, LoginSchema } from "@biodentis/shared-validators";
+import { generateAccessToken, generateRefreshToken, hashToken, verifyRefreshToken } from "@/lib/auth";
 import { AuthenticationError, DomainError, NotFoundError } from "@/lib/errors";
-import { Role } from "@workspace/shared-validators";
+
+const REFRESH_EXPIRATION_DAYS = 7;
 
 export class AuthService {
   async register(data: unknown) {
@@ -14,30 +15,39 @@ export class AuthService {
       throw new DomainError("El email ya está registrado", 409);
     }
 
-    const passwordHash = await bcrypt.hash(parsed.password, 10);
+    const passwordHash = await bcrypt.hash(parsed.password, 12);
 
     const user = await prisma.user.create({
       data: {
         email: parsed.email,
         passwordHash,
-        role: parsed.role as Role,
+        role: "PATIENT",
         firstName: parsed.firstName,
         lastName: parsed.lastName,
         phone: parsed.phone,
       },
     });
 
-    if (parsed.role === "DENTIST") {
-      await prisma.dentist.create({
-        data: { userId: user.id, specialty: "General" },
-      });
-    }
+    const accessToken = generateAccessToken(user.id);
+    const { token: refreshToken, jti } = generateRefreshToken(user.id);
+    const tokenHash = hashToken(refreshToken);
 
-    const payload: TokenPayload = { userId: user.id, email: user.email, role: user.role as Role };
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_EXPIRATION_DAYS);
+
+    await prisma.refreshToken.create({
+      data: {
+        jti,
+        tokenHash,
+        userId: user.id,
+        expiresAt,
+      },
+    });
+
     return {
       user: { id: user.id, email: user.email, role: user.role, firstName: user.firstName, lastName: user.lastName },
-      accessToken: generateAccessToken(payload),
-      refreshToken: generateRefreshToken(payload),
+      accessToken,
+      refreshToken,
     };
   }
 
@@ -49,31 +59,116 @@ export class AuthService {
       throw new AuthenticationError("Credenciales inválidas");
     }
 
+    if (!user.isActive) {
+      throw new AuthenticationError("Cuenta desactivada. Contacte al administrador.");
+    }
+
     const valid = await bcrypt.compare(parsed.password, user.passwordHash);
     if (!valid) {
       throw new AuthenticationError("Credenciales inválidas");
     }
 
-    const payload: TokenPayload = { userId: user.id, email: user.email, role: user.role as Role };
+    const accessToken = generateAccessToken(user.id);
+    const { token: refreshToken, jti } = generateRefreshToken(user.id);
+    const tokenHash = hashToken(refreshToken);
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_EXPIRATION_DAYS);
+
+    await prisma.refreshToken.create({
+      data: {
+        jti,
+        tokenHash,
+        userId: user.id,
+        expiresAt,
+      },
+    });
+
     return {
       user: { id: user.id, email: user.email, role: user.role, firstName: user.firstName, lastName: user.lastName },
-      accessToken: generateAccessToken(payload),
-      refreshToken: generateRefreshToken(payload),
+      accessToken,
+      refreshToken,
     };
   }
 
   async refresh(refreshToken: string) {
     const payload = verifyRefreshToken(refreshToken);
+    const tokenHash = hashToken(refreshToken);
 
-    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+    const storedToken = await prisma.refreshToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!storedToken) {
+      throw new AuthenticationError("Refresh token inválido");
+    }
+
+    if (storedToken.revokedAt) {
+      await this.revokeAllUserTokens(storedToken.userId);
+      throw new AuthenticationError("Refresh token revocado — sesión cerrada por seguridad");
+    }
+
+    if (storedToken.expiresAt < new Date()) {
+      throw new AuthenticationError("Refresh token expirado");
+    }
+
+    if (storedToken.userId !== payload.sub) {
+      throw new AuthenticationError("Refresh token no pertenece a este usuario");
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) {
       throw new NotFoundError("Usuario no encontrado");
     }
 
-    const newPayload: TokenPayload = { userId: user.id, email: user.email, role: user.role as Role };
+    if (!user.isActive) {
+      throw new AuthenticationError("Cuenta desactivada");
+    }
+
+    const accessToken = generateAccessToken(user.id);
+    const { token: newRefreshToken, jti: newJti } = generateRefreshToken(user.id);
+    const newTokenHash = hashToken(newRefreshToken);
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_EXPIRATION_DAYS);
+
+    await prisma.$transaction([
+      prisma.refreshToken.update({
+        where: { tokenHash },
+        data: {
+          revokedAt: new Date(),
+          replacedByToken: newJti,
+        },
+      }),
+      prisma.refreshToken.create({
+        data: {
+          jti: newJti,
+          tokenHash: newTokenHash,
+          userId: user.id,
+          expiresAt,
+        },
+      }),
+    ]);
+
     return {
-      accessToken: generateAccessToken(newPayload),
-      refreshToken: generateRefreshToken(newPayload),
+      accessToken,
+      refreshToken: newRefreshToken,
     };
+  }
+
+  async logout(refreshToken: string) {
+    const tokenHash = hashToken(refreshToken);
+
+    await prisma.refreshToken.updateMany({
+      where: { tokenHash, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  async revokeAllUserTokens(userId: string) {
+    await prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 }

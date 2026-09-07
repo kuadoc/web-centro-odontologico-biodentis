@@ -1,4 +1,12 @@
-export { RoleSchema, AppointmentStatusSchema } from "./enums";
+export {
+  RoleSchema,
+  AppointmentStatusSchema,
+  DentalUnitTypeSchema,
+  DentalUnitStatusSchema,
+  ExceptionScopeSchema,
+  ExceptionStatusSchema,
+  SettingTypeSchema,
+} from "./enums";
 export {
   RegisterSchema,
   LoginSchema,
@@ -8,8 +16,15 @@ export {
   CreateClinicalRecordSchema,
   ConfigureAvailabilitySchema,
   AddScheduleExceptionSchema,
+  UpdateScheduleExceptionSchema,
   UpdateClinicSchema,
   DateRangeSchema,
+  CreateDentalUnitSchema,
+  UpdateDentalUnitSchema,
+  CreateEmailTemplateSchema,
+  UpdateEmailTemplateSchema,
+  UpdateSystemSettingSchema,
+  BulkUpdateSettingsSchema,
 } from "./schemas";
 export {
   canCancelOrReschedule,
@@ -17,4 +32,12 @@ export {
   isValidTransition,
   VALID_TRANSITIONS,
 } from "./rules";
-export { Role, AppointmentStatus } from "./types";
+export {
+  Role,
+  AppointmentStatus,
+  DentalUnitType,
+  DentalUnitStatus,
+  ExceptionScope,
+  ExceptionStatus,
+  SettingType,
+} from "@biodentis/shared-types";

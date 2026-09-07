@@ -1,4 +1,4 @@
-import { AppointmentStatus } from "./types";
+import { AppointmentStatus } from "@biodentis/shared-types";
 
 const HOURS_24_IN_MS = 24 * 60 * 60 * 1000;
 
@@ -24,5 +24,5 @@ export const VALID_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> =
 };
 
 export function isValidTransition(from: AppointmentStatus, to: AppointmentStatus): boolean {
-  return VALID_TRANSITIONS[from].includes(to);
+  return VALID_TRANSITIONS[from]?.includes(to) ?? false;
 }
