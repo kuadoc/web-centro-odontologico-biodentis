@@ -1,5 +1,5 @@
 import { ClinicRepository } from "./clinic.repository";
-import { UpdateClinicSchema } from "@workspace/shared-validators";
+import { UpdateClinicSchema } from "@biodentis/shared-validators";
 import { NotFoundError } from "@/lib/errors";
 
 const clinicRepository = new ClinicRepository();

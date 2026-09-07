@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { AppointmentService } from "@/modules/appointments/appointment.service";
-import { authenticate } from "@/lib/middleware";
+import { requireRole } from "@/lib/middleware";
 import { handleApiError } from "@/lib/errors";
+import { Role } from "@biodentis/shared-types";
 
 const appointmentService = new AppointmentService();
 
@@ -10,7 +11,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    authenticate(request);
+    await requireRole(request, [Role.PATIENT, Role.DENTIST, Role.RECEPTIONIST, Role.ADMIN]);
     const { id } = await params;
     const appointment = await appointmentService.cancel(id);
     return Response.json(appointment);

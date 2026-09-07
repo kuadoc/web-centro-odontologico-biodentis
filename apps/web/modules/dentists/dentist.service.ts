@@ -14,6 +14,10 @@ export class DentistService {
     return dentist;
   }
 
+  async getByUserId(userId: string) {
+    return dentistRepository.findByUserId(userId);
+  }
+
   async getBySpecialty(specialty: string) {
     return dentistRepository.findBySpecialty(specialty);
   }

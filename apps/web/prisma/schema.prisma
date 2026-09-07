@@ -22,6 +22,36 @@ enum AppointmentStatus {
   CANCELLED
 }
 
+enum DentalUnitType {
+  SILLON
+  QUIRURGICO
+  RADIOLOGICO
+}
+
+enum DentalUnitStatus {
+  ACTIVE
+  MAINTENANCE
+  INACTIVE
+}
+
+enum ExceptionScope {
+  DENTIST
+  CLINIC
+  UNIT
+}
+
+enum ExceptionStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum SettingType {
+  NUMBER
+  STRING
+  BOOLEAN
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -30,6 +60,7 @@ model User {
   firstName    String
   lastName     String
   phone        String?
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -37,6 +68,7 @@ model User {
   clinicalRecords ClinicalRecord[] @relation("PatientRecords")
   appointments    Appointment[]
   auditLogs       AuditLog[]
+  refreshTokens   RefreshToken[]
 
   @@map("users")
 }
@@ -69,14 +101,17 @@ model Availability {
 }
 
 model ScheduleException {
-  id        String   @id @default(uuid())
+  id        String           @id @default(uuid())
   dentistId String
-  date      DateTime @db.Date
+  startDate DateTime
+  endDate   DateTime
   reason    String?
+  scope     ExceptionScope   @default(DENTIST)
+  status    ExceptionStatus  @default(PENDING)
 
   dentist Dentist @relation(fields: [dentistId], references: [id])
 
-  @@unique([dentistId, date])
+  @@unique([dentistId, startDate])
   @@map("schedule_exceptions")
 }
 
@@ -133,11 +168,67 @@ model AuditLog {
 }
 
 model Clinic {
-  id           String @id @default(uuid())
+  id           String  @id @default(uuid())
   name         String
   address      String?
   phone        String?
   generalHours String?
+  email        String?
+  rut          String?
+  website      String?
+  logoUrl      String?
 
   @@map("clinic")
+}
+
+model DentalUnit {
+  id          String           @id @default(uuid())
+  name        String
+  type        DentalUnitType
+  status      DentalUnitStatus @default(ACTIVE)
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@map("dental_units")
+}
+
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  name      String
+  subject   String
+  body      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("email_templates")
+}
+
+model SystemSetting {
+  id    String     @id @default(uuid())
+  key   String     @unique
+  value String
+  type  SettingType @default(NUMBER)
+
+  @@map("system_settings")
+}
+
+model RefreshToken {
+  id               String    @id @default(uuid())
+  jti              String    @unique
+  tokenHash        String    @unique
+  userId           String
+  deviceInfo       String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  replacedByToken  String?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
 }

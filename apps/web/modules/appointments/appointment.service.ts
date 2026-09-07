@@ -6,8 +6,8 @@ import {
   canCancelOrReschedule,
   isValidTimeRange,
   isValidTransition,
-  AppointmentStatus,
-} from "@workspace/shared-validators";
+} from "@biodentis/shared-validators";
+import { AppointmentStatus } from "@biodentis/shared-types";
 import { ValidationError, DomainError, ScheduleConflictError, NotFoundError } from "@/lib/errors";
 
 const appointmentRepository = new AppointmentRepository();

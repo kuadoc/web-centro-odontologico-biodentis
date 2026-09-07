@@ -7,11 +7,12 @@ import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { useAuthContext } from "@/contexts/auth-context";
+import { useAuth } from "@/hooks/use-auth";
+import { Role } from "@biodentis/shared-types";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register } = useAuthContext();
+  const { register } = useAuth();
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -29,7 +30,7 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      await register(form);
+      await register({ ...form, role: form.role as Role });
       router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al registrarse");

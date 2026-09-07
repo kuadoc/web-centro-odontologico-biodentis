@@ -1,9 +1,6 @@
-import { Role } from "@workspace/shared-validators";
-
-export interface TokenPayload {
-  userId: string;
-  email: string;
-  role: Role;
+export interface AccessTokenPayload {
+  sub: string;
+  jti: string;
 }
 
 export interface ApiResponse<T = unknown> {

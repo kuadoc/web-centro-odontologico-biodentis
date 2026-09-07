@@ -1,50 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Badge } from "@workspace/ui/components/badge";
-import { useAuthContext } from "@/contexts/auth-context";
+import { useAuth } from "@/hooks/use-auth";
+import { useAppointments, useDentists } from "@/hooks/use-queries";
 import { Calendar, Users, Stethoscope, FileText } from "lucide-react";
 
 export default function DashboardPage() {
-  const { api, user } = useAuthContext();
-  const [stats, setStats] = useState({
-    totalAppointments: 0,
-    pendingAppointments: 0,
-    completedAppointments: 0,
-    totalDentists: 0,
-  });
-  const [recentAppointments, setRecentAppointments] = useState<Array<{
-    id: string;
-    date: string;
-    startTime: string;
-    status: string;
-    patient: { firstName: string; lastName: string };
-    dentist: { user: { firstName: string; lastName: string } };
-  }>>([]);
+  const { user } = useAuth();
+  const { data: appointmentsData, isLoading: appointmentsLoading } = useAppointments();
+  const { data: dentistsData, isLoading: dentistsLoading } = useDentists();
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [appointments, dentists] = await Promise.all([
-          api.get("/api/appointments"),
-          api.get("/api/dentists"),
-        ]);
+  const appointments = useMemo(
+    () => (Array.isArray(appointmentsData) ? appointmentsData : []),
+    [appointmentsData]
+  );
 
-        const appts = Array.isArray(appointments) ? appointments : [];
-        setRecentAppointments(appts.slice(0, 5));
-        setStats({
-          totalAppointments: appts.length,
-          pendingAppointments: appts.filter((a: { status: string }) => a.status === "PENDING").length,
-          completedAppointments: appts.filter((a: { status: string }) => a.status === "COMPLETED").length,
-          totalDentists: Array.isArray(dentists) ? dentists.length : 0,
-        });
-      } catch {
-        console.error("Error loading dashboard");
-      }
-    }
-    load();
-  }, [api]);
+  const dentists = useMemo(
+    () => (Array.isArray(dentistsData) ? dentistsData : []),
+    [dentistsData]
+  );
+
+  const stats = useMemo(
+    () => ({
+      totalAppointments: appointments.length,
+      pendingAppointments: appointments.filter((a) => a.status === "PENDING").length,
+      completedAppointments: appointments.filter((a) => a.status === "COMPLETED").length,
+      totalDentists: dentists.length,
+    }),
+    [appointments, dentists]
+  );
+
+  const recentAppointments = useMemo(
+    () => appointments.filter((a) => a.patient && a.dentist).slice(0, 5),
+    [appointments]
+  );
 
   const statCards = [
     { title: "Citas Totales", value: stats.totalAppointments, icon: Calendar },
@@ -61,6 +52,14 @@ export default function DashboardPage() {
     NO_SHOW: "bg-gray-100 text-gray-800",
   };
 
+  if (appointmentsLoading || dentistsLoading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <p className="text-muted-foreground">Cargando dashboard...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -70,17 +69,17 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">Resumen del sistema BIODENTIS</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {statCards.map((stat) => {
           const Icon = stat.icon;
           return (
             <Card key={stat.title}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+                <CardTitle className="text-xs sm:text-sm font-medium">{stat.title}</CardTitle>
                 <Icon className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
+                <div className="text-xl sm:text-2xl font-bold">{stat.value}</div>
               </CardContent>
             </Card>
           );
@@ -100,10 +99,10 @@ export default function DashboardPage() {
                 <div key={apt.id} className="flex items-center justify-between rounded-lg border p-3">
                   <div>
                     <p className="font-medium">
-                      {apt.patient.firstName} {apt.patient.lastName}
+                      {apt.patient!.firstName} {apt.patient!.lastName}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Dr. {apt.dentist.user.firstName} {apt.dentist.user.lastName} - {apt.date} {apt.startTime}
+                      Dr. {apt.dentist!.user.firstName} {apt.dentist!.user.lastName} - {apt.date} {apt.startTime}
                     </p>
                   </div>
                   <Badge className={statusColors[apt.status] || ""}>{apt.status}</Badge>

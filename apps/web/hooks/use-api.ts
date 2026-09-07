@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
-import { useAuth } from "./use-auth";
 
 export function useApi() {
-  const { token, logout } = useAuth();
+  const getToken = useCallback(() => localStorage.getItem("accessToken"), []);
 
   const request = useCallback(async <T>(url: string, options: RequestInit = {}): Promise<T> => {
     const headers: Record<string, string> = {
@@ -12,6 +11,7 @@ export function useApi() {
       ...((options.headers as Record<string, string>) || {}),
     };
 
+    const token = getToken();
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
@@ -19,17 +19,25 @@ export function useApi() {
     const res = await fetch(url, { ...options, headers });
 
     if (res.status === 401) {
-      logout();
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("user");
+      window.location.href = "/login";
       throw new Error("Sesión expirada");
     }
 
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Error en la solicitud");
+      let errMsg = "Error en la solicitud";
+      try {
+        const err = await res.json();
+        errMsg = err.error || err.message || `HTTP ${res.status}`;
+      } catch {
+        errMsg = `HTTP ${res.status} ${res.statusText}`;
+      }
+      throw new Error(errMsg);
     }
 
     return res.json();
-  }, [token, logout]);
+  }, [getToken]);
 
   const get = useCallback(<T>(url: string) => request<T>(url), [request]);
   const post = useCallback(<T>(url: string, body: unknown) => request<T>(url, { method: "POST", body: JSON.stringify(body) }), [request]);

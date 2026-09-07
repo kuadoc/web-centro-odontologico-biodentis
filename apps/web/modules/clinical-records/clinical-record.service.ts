@@ -1,5 +1,5 @@
 import { ClinicalRecordRepository } from "./clinical-record.repository";
-import { CreateClinicalRecordSchema } from "@workspace/shared-validators";
+import { CreateClinicalRecordSchema } from "@biodentis/shared-validators";
 import { NotFoundError, DomainError } from "@/lib/errors";
 
 const clinicalRecordRepository = new ClinicalRecordRepository();

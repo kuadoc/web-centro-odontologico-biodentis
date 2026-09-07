@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { AppointmentStatus } from "@workspace/shared-validators";
+import { AppointmentStatus } from "@biodentis/shared-types";
 
 export class AppointmentRepository {
   async findById(id: string) {

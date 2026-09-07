@@ -1,5 +1,5 @@
 import { AvailabilityRepository, AvailableSlot } from "./availability.repository";
-import { ConfigureAvailabilitySchema, AddScheduleExceptionSchema } from "@workspace/shared-validators";
+import { ConfigureAvailabilitySchema, AddScheduleExceptionSchema } from "@biodentis/shared-validators";
 
 const availabilityRepository = new AvailabilityRepository();
 
@@ -33,7 +33,12 @@ export class AvailabilityService {
 
   async addException(dentistId: string, data: unknown) {
     const parsed = AddScheduleExceptionSchema.parse(data);
-    return availabilityRepository.addException(dentistId, new Date(parsed.date), parsed.reason);
+    return availabilityRepository.addException(
+      dentistId,
+      new Date(parsed.startDate),
+      new Date(parsed.endDate),
+      parsed.reason
+    );
   }
 
   async removeException(dentistId: string, dateStr: string) {

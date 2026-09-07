@@ -13,6 +13,36 @@ export enum AppointmentStatus {
   CANCELLED = "CANCELLED",
 }
 
+export enum DentalUnitType {
+  SILLON = "SILLON",
+  QUIRURGICO = "QUIRURGICO",
+  RADIOLOGICO = "RADIOLOGICO",
+}
+
+export enum DentalUnitStatus {
+  ACTIVE = "ACTIVE",
+  MAINTENANCE = "MAINTENANCE",
+  INACTIVE = "INACTIVE",
+}
+
+export enum ExceptionScope {
+  DENTIST = "DENTIST",
+  CLINIC = "CLINIC",
+  UNIT = "UNIT",
+}
+
+export enum ExceptionStatus {
+  PENDING = "PENDING",
+  CONFIRMED = "CONFIRMED",
+  CANCELLED = "CANCELLED",
+}
+
+export enum SettingType {
+  NUMBER = "NUMBER",
+  STRING = "STRING",
+  BOOLEAN = "BOOLEAN",
+}
+
 export interface UserPayload {
   id: string;
   email: string;
@@ -48,8 +78,11 @@ export interface Availability {
 export interface ScheduleException {
   id: string;
   dentistId: string;
-  date: string;
+  startDate: string;
+  endDate: string;
   reason: string | null;
+  scope: ExceptionScope;
+  status: ExceptionStatus;
 }
 
 export interface Appointment {
@@ -85,6 +118,38 @@ export interface Clinic {
   address: string | null;
   phone: string | null;
   generalHours: string | null;
+  email: string | null;
+  rut: string | null;
+  website: string | null;
+  logoUrl: string | null;
+}
+
+export interface DentalUnit {
+  id: string;
+  name: string;
+  type: DentalUnitType;
+  status: DentalUnitStatus;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmailTemplate {
+  id: string;
+  key: string;
+  name: string;
+  subject: string;
+  body: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SystemSetting {
+  id: string;
+  key: string;
+  value: string;
+  type: SettingType;
 }
 
 export interface ApiResponse<T> {

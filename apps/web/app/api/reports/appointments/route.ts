@@ -1,15 +1,12 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate } from "@/lib/middleware";
-import { Role } from "@workspace/shared-validators";
+import { requireRole } from "@/lib/middleware";
+import { Role } from "@biodentis/shared-types";
 import { handleApiError } from "@/lib/errors";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = authenticate(request);
-    if (user.role !== Role.ADMIN && user.role !== Role.RECEPTIONIST) {
-      return Response.json({ error: "Sin permisos" }, { status: 403 });
-    }
+    await requireRole(request, [Role.ADMIN, Role.RECEPTIONIST]);
 
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
