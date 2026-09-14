@@ -25,6 +25,14 @@ export {
   UpdateEmailTemplateSchema,
   UpdateSystemSettingSchema,
   BulkUpdateSettingsSchema,
+  CreatePatientSchema,
+  UpdatePatientSchema,
+  DeactivatePatientSchema,
+  ForgotPasswordSchema,
+  ResetPasswordSchema,
+  UpdateProfileSchema,
+  UpdatePasswordSchema,
+  UpdateDentistProfileSchema,
 } from "./schemas";
 export {
   canCancelOrReschedule,

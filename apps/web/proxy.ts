@@ -68,7 +68,7 @@ function setCorsHeaders(response: NextResponse, origin: string | null): NextResp
   return response;
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const origin = request.headers.get("origin");
 

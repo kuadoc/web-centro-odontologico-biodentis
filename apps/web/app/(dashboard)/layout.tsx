@@ -29,14 +29,15 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <div className="flex min-h-screen">
+    // `min-w-0` en la columna de contenido es lo que impide que una tabla ancha
+    // ensanche el flex item y empuje el layout fuera del viewport.
+    <div className="flex min-h-screen w-full overflow-x-hidden">
       <Sidebar />
-      <div
-        className="flex flex-1 flex-col transition-all duration-200 ease-in-out min-w-0"
-        style={{ marginLeft: 0 }}
-      >
+      <div className="flex min-w-0 flex-1 flex-col">
         <Header />
-        <main className="flex-1 p-4 sm:p-6 max-w-[1400px] mx-auto w-full">{children}</main>
+        <main className="mx-auto w-full min-w-0 max-w-[1400px] flex-1 p-4 sm:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );

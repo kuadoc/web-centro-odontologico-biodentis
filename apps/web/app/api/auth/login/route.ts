@@ -24,30 +24,33 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     email = typeof body?.email === "string" ? body.email.toLowerCase() : "unknown";
 
-    if (loginLimiterByIp.isBlocked(`ip:${ip}`)) {
-      return NextResponse.json(
-        { error: "Demasiados intentos desde esta IP. Intente más tarde." },
-        { status: 429 }
-      );
-    }
+    // [DESHABILITADO PARA PRUEBAS] Rate limiting por IP
+    // if (loginLimiterByIp.isBlocked(`ip:${ip}`)) {
+    //   return NextResponse.json(
+    //     { error: "Demasiados intentos desde esta IP. Intente más tarde." },
+    //     { status: 429 }
+    //   );
+    // }
 
-    if (email !== "unknown" && loginLimiterByEmail.isBlocked(`email:${email}`)) {
-      return NextResponse.json(
-        { error: "Demasiados intentos para este email. Intente más tarde." },
-        { status: 429 }
-      );
-    }
+    // [DESHABILITADO PARA PRUEBAS] Rate limiting por email
+    // if (email !== "unknown" && loginLimiterByEmail.isBlocked(`email:${email}`)) {
+    //   return NextResponse.json(
+    //     { error: "Demasiados intentos para este email. Intente más tarde." },
+    //     { status: 429 }
+    //   );
+    // }
 
-    if (email !== "unknown") {
-      const { locked, remainingMs } = isAccountLocked(email);
-      if (locked) {
-        const minutes = Math.ceil(remainingMs / 60000);
-        return NextResponse.json(
-          { error: `Cuenta bloqueada temporalmente. Intente en ${minutes} minuto(s).` },
-          { status: 423 }
-        );
-      }
-    }
+    // [DESHABILITADO PARA PRUEBAS] Bloqueo de cuenta por intentos fallidos
+    // if (email !== "unknown") {
+    //   const { locked, remainingMs } = isAccountLocked(email);
+    //   if (locked) {
+    //     const minutes = Math.ceil(remainingMs / 60000);
+    //     return NextResponse.json(
+    //       { error: `Cuenta bloqueada temporalmente. Intente en ${minutes} minuto(s).` },
+    //       { status: 423 }
+    //     );
+    //   }
+    // }
 
     const result = await authService.login(body);
 
@@ -64,14 +67,15 @@ export async function POST(request: NextRequest) {
 
     return setRefreshTokenCookie(response, result.refreshToken);
   } catch (error) {
-    if (email !== "unknown") {
-      loginLimiterByIp.increment(`ip:${ip}`);
-      loginLimiterByEmail.increment(`email:${email}`);
-      const accountLocked = recordFailedAttempt(email, ip, "invalid_credentials");
-      console.warn(
-        `[LOGIN_FAIL] ip=${ip} email=${email} accountLocked=${accountLocked}`
-      );
-    }
+    // [DESHABILITADO PARA PRUEBAS] Registro de intentos fallidos
+    // if (email !== "unknown") {
+    //   loginLimiterByIp.increment(`ip:${ip}`);
+    //   loginLimiterByEmail.increment(`email:${email}`);
+    //   const accountLocked = recordFailedAttempt(email, ip, "invalid_credentials");
+    //   console.warn(
+    //     `[LOGIN_FAIL] ip=${ip} email=${email} accountLocked=${accountLocked}`
+    //   );
+    // }
 
     return handleApiError(error);
   }

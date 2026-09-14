@@ -39,7 +39,7 @@ export function hashToken(token: string): string {
 }
 
 const REFRESH_COOKIE_NAME = "refresh_token";
-const REFRESH_COOKIE_PATH = "/api/auth";
+const REFRESH_COOKIE_PATH = "/";
 
 export function setRefreshTokenCookie(response: NextResponse, token: string): NextResponse {
   response.cookies.set(REFRESH_COOKIE_NAME, token, {

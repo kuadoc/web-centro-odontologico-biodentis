@@ -52,6 +52,28 @@ enum SettingType {
   BOOLEAN
 }
 
+/// Prioridad clinica de la cita (triaje de urgencias).
+enum AppointmentPriority {
+  NORMAL
+  URGENT
+  EMERGENCY
+}
+
+/// Estado del paciente dentro de la clinica el dia de la cita (sala de espera).
+enum WaitingStatus {
+  NOT_ARRIVED
+  WAITING
+  TRIAGE
+  IN_CHAIR
+  DONE
+}
+
+enum TreatmentPlanStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -59,30 +81,43 @@ model User {
   role         Role
   firstName    String
   lastName     String
-  phone        String?
+  phone          String?
+  secondaryPhone String?
+  address        String?
+  avatarUrl      String?
+  /// Codigo visible del paciente (#PAC-1082). Solo para role=PATIENT.
+  patientCode    String?  @unique
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  dentistProfile  Dentist?
-  clinicalRecords ClinicalRecord[] @relation("PatientRecords")
-  appointments    Appointment[]
-  auditLogs       AuditLog[]
-  refreshTokens   RefreshToken[]
+  dentistProfile       Dentist?
+  treatmentPlans       TreatmentPlan[]  @relation("PatientPlans")
+  clinicalRecords      ClinicalRecord[] @relation("PatientRecords")
+  appointments         Appointment[]
+  auditLogs            AuditLog[]
+  refreshTokens        RefreshToken[]
+  passwordResetTokens  PasswordResetToken[]
 
   @@map("users")
 }
 
 model Dentist {
-  id        String @id @default(uuid())
-  userId    String @unique
-  specialty String
+  id             String  @id @default(uuid())
+  userId         String  @unique
+  specialty      String
+  licenseNumber  String?
+  university     String?
+  shiftLabel     String?
+  assignedUnitId String?
 
   user               User                 @relation(fields: [userId], references: [id])
+  assignedUnit       DentalUnit?          @relation(fields: [assignedUnitId], references: [id])
   availability       Availability[]
   scheduleExceptions ScheduleException[]
   appointments       Appointment[]
   clinicalRecords    ClinicalRecord[]     @relation("DentistRecords")
+  treatmentPlans     TreatmentPlan[]
 
   @@map("dentists")
 }
@@ -127,12 +162,89 @@ model Appointment {
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 
+  /// Que se le hace al paciente y en que sillon. Alimentan la agenda del dashboard.
+  treatmentId     String?
+  dentalUnitId    String?
+  treatmentPlanId String?
+  /// Numero de sesion dentro del plan ("Sesion 2 de 3").
+  sessionNumber   Int?
+
+  /// Sala de espera: llegada, triaje y llamado.
+  priority      AppointmentPriority @default(NORMAL)
+  waitingStatus WaitingStatus       @default(NOT_ARRIVED)
+  checkInAt     DateTime?
+  calledAt      DateTime?
+
   patient        User             @relation(fields: [patientId], references: [id])
   dentist        Dentist          @relation(fields: [dentistId], references: [id])
+  treatment      Treatment?       @relation(fields: [treatmentId], references: [id])
+  dentalUnit     DentalUnit?      @relation(fields: [dentalUnitId], references: [id])
+  treatmentPlan  TreatmentPlan?   @relation(fields: [treatmentPlanId], references: [id])
   clinicalRecord ClinicalRecord?
 
   @@unique([dentistId, date, startTime])
+  @@index([date, status])
+  @@index([date, waitingStatus])
   @@map("appointments")
+}
+
+/// Catalogo de procedimientos: duracion estandar y precio de lista.
+model Treatment {
+  id              String   @id @default(uuid())
+  name            String
+  category        String
+  durationMinutes Int      @default(30)
+  price           Decimal  @db.Decimal(10, 2)
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  appointments Appointment[]
+  plans        TreatmentPlan[]
+
+  @@index([category])
+  @@map("treatments")
+}
+
+/// Tratamiento multisesion en curso de un paciente. Alimenta el KPI "Tratamientos en Curso".
+model TreatmentPlan {
+  id                String              @id @default(uuid())
+  patientId         String
+  dentistId         String
+  treatmentId       String
+  status            TreatmentPlanStatus @default(ACTIVE)
+  totalSessions     Int                 @default(1)
+  completedSessions Int                 @default(0)
+  startedAt         DateTime            @default(now())
+  completedAt       DateTime?
+  notes             String?
+
+  patient      User          @relation("PatientPlans", fields: [patientId], references: [id])
+  dentist      Dentist       @relation(fields: [dentistId], references: [id])
+  treatment    Treatment     @relation(fields: [treatmentId], references: [id])
+  appointments Appointment[]
+
+  @@index([status])
+  @@index([patientId])
+  @@map("treatment_plans")
+}
+
+/// Insumos clinicos. Alimenta la tarjeta "Alerta de Insumos".
+model InventoryItem {
+  id        String   @id @default(uuid())
+  name      String
+  sku       String   @unique
+  category  String
+  stock     Int      @default(0)
+  minStock  Int      @default(0)
+  unit      String   @default("unidad")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@map("inventory_items")
 }
 
 model ClinicalRecord {
@@ -190,6 +302,9 @@ model DentalUnit {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
+  dentists     Dentist[]
+  appointments Appointment[]
+
   @@map("dental_units")
 }
 
@@ -231,4 +346,35 @@ model RefreshToken {
   @@index([userId])
   @@index([tokenHash])
   @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("password_reset_tokens")
+}
+
+model EmailLog {
+  id        String   @id @default(uuid())
+  to        String
+  type      String
+  subject   String
+  status    String
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([to])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("email_logs")
 }

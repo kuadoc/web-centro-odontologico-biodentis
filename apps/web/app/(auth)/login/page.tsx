@@ -73,6 +73,9 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" isDisabled={isLoading}>
               {isLoading ? "Ingresando..." : "Iniciar sesión"}
             </Button>
+            <Link href="/forgot-password" className="text-sm text-primary hover:underline">
+              ¿Olvidaste tu contraseña?
+            </Link>
             <p className="text-sm text-muted-foreground">
               ¿No tienes cuenta?{" "}
               <Link href="/register" className="text-primary hover:underline">

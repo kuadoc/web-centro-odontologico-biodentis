@@ -45,7 +45,41 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+/**
+ * Descarga un archivo de un endpoint protegido.
+ *
+ * No se puede usar un `<a href>` normal porque el token va en la cabecera
+ * Authorization, no en una cookie: hay que pedirlo por fetch y volcarlo a un blob.
+ */
+async function download(url: string, fallbackName: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (res.status === 401) {
+    clearAuth();
+    throw new Error("Sesión expirada");
+  }
+  if (!res.ok) throw new Error(`No se pudo descargar el archivo (HTTP ${res.status})`);
+
+  // El nombre real viene en Content-Disposition; si falta, usamos el de respaldo.
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="?([^";]+)"?/);
+  const filename = match?.[1] ?? fallbackName;
+
+  const blobUrl = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(blobUrl);
+}
+
 export const api = {
+  download,
   get: <T>(url: string) => request<T>(url),
   post: <T>(url: string, body: unknown) =>
     request<T>(url, { method: "POST", body: JSON.stringify(body) }),

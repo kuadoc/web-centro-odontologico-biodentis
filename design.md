@@ -753,3 +753,117 @@ ring-1 ring-foreground/10, shadow-md
 // Transiciones
 transition-all, transition-colors
 ```
+
+---
+
+## 15. Patrones de Módulo (Dashboard, Pacientes, Perfil)
+
+Estos patrones se repiten en los módulos administrativos. Reutilízalos en vez de
+inventar variantes nuevas.
+
+### Encabezado de módulo
+
+Migas → título + badge de conteo → descripción, y a la derecha una píldora de
+alcance y la acción primaria.
+
+```tsx
+<div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+  <div className="flex flex-col gap-1">
+    <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+      <span>Administración del sistema</span>
+      <span className="text-[10px]">•</span>
+      <span className="font-medium text-foreground">Directorio de Pacientes</span>
+    </div>
+    <div className="flex flex-wrap items-center gap-3">
+      <h1 className="text-2xl font-bold tracking-tight">Pacientes</h1>
+      <Badge variant="secondary" className="rounded-full text-xs font-medium">342 registrados</Badge>
+    </div>
+    <p className="max-w-2xl text-sm text-muted-foreground">…</p>
+  </div>
+  {/* píldora de alcance + acción primaria */}
+</div>
+```
+
+### Cinta de KPIs
+
+Cuatro tarjetas `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4`. Cada una:
+etiqueta (`text-xs text-muted-foreground`), valor (`text-xl`/`text-4xl font-bold
+tracking-tight`), pista de contexto y un icono en `h-10 w-10 rounded-lg bg-muted`.
+
+**Regla**: los KPIs se calculan en el servidor sobre toda la base, nunca sobre la
+página visible de una tabla.
+
+### Barra de filtros
+
+`Card` con búsqueda (`Input` + icono `Search` en `absolute left-2.5 top-2.5`),
+uno o más `Select`, botón "Restablecer" (`variant="outline"` + `RotateCcw`) y la
+acción de exportar alineada a la derecha.
+
+**Regla**: cada cambio de filtro devuelve la paginación a la página 1.
+
+### Tabla de datos
+
+`Card` con `p-0 overflow-hidden` conteniendo `Table`. Cabeceras en
+`text-xs uppercase tracking-wider`. El estado vacío va en
+`TableBody renderEmptyState` — **no** en `Table`, que no acepta esa prop.
+
+Pie de paginación: `border-t bg-muted/50 p-4`, con "Mostrando X-Y de N",
+selector de filas por página y navegación anterior/siguiente.
+
+### Indicadores de estado
+
+Punto de color + etiqueta dentro de un `Badge variant="outline"`:
+
+```tsx
+<Badge variant="outline">
+  <span className={`mr-1.5 h-1.5 w-1.5 rounded-full ${activo ? "bg-green-500" : "bg-muted-foreground"}`} />
+  {activo ? "Activo" : "Inactivo"}
+</Badge>
+```
+
+### Modal con motivo de auditoría
+
+Para editar datos sensibles: aviso en `bg-muted` con `AlertTriangle`, `Textarea`
+de motivo con contador vivo, y botón de guardar deshabilitado hasta alcanzar el
+mínimo (15 caracteres).
+
+**Regla**: el mínimo se valida también en el backend. El bloqueo del botón es
+comodidad, no seguridad.
+
+### Panel lateral (drawer)
+
+No existe componente Drawer en `@workspace/ui`; se compone con un overlay fijo:
+
+```tsx
+<div className="fixed inset-0 z-50 flex justify-end bg-black/30 backdrop-blur-xs"
+     onClick={(e) => e.target === e.currentTarget && cerrar()}>
+  <aside className="flex h-full w-full max-w-lg flex-col overflow-hidden bg-background shadow-2xl">
+    {/* cabecera bg-muted/50 p-6 · cuerpo flex-1 overflow-y-auto p-6 · pie border-t */}
+  </aside>
+</div>
+```
+
+### Iconos añadidos
+
+| Icono | Uso |
+|-------|-----|
+| `ShieldCheck` | Píldora de alcance / acceso restringido |
+| `Lock` | Dato de solo lectura o información protegida |
+| `AlertTriangle` | Advertencia previa a una acción auditada |
+| `UserPlus` / `UserMinus` | Activar / desactivar cuenta |
+| `Armchair` | Sala de espera |
+| `Volume2` | Llamar al siguiente paciente |
+| `Package` | Alerta de insumos |
+| `LogIn` | Registrar llegada del paciente |
+
+### Alcance por rol en la UI
+
+La UI **refleja** el alcance, no lo impone: el backend ya filtra por rol. Aun
+así, oculta lo que el rol no puede usar para evitar errores 403 visibles.
+
+| Rol | Dashboard | Pacientes |
+|-----|-----------|-----------|
+| `ADMIN` | Toda la clínica | Todos los pacientes, lectura y escritura |
+| `RECEPTIONIST` | Toda la clínica | Todos los pacientes, lectura y escritura |
+| `DENTIST` | Solo su agenda y su producción | Solo pacientes que ha atendido, solo lectura |
+| `PATIENT` | Sin acceso | Sin acceso |

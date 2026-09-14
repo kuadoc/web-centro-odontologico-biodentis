@@ -35,13 +35,59 @@ function Table({ className, ...props }: TableProps) {
   )
 }
 
-function TableHeader<T>({ className, ...props }: TableHeaderProps<T>) {
+function TableHeader<T>({ className, children, ...props }: TableHeaderProps<T>) {
+  // Failsafe: react-aria Table requires at least one Column with isRowHeader.
+  // Auto-inject isRowHeader into the first Column if the consumer forgot it.
+  const enhancedChildren = React.useMemo(() => {
+    if (!children) return children as React.ReactNode
+
+    let hasRowHeader = false
+    const check = (nodes: React.ReactNode): void => {
+      React.Children.forEach(nodes, (child) => {
+        if (!React.isValidElement(child)) return
+        const p = child.props as Record<string, unknown>
+        if (p.isRowHeader) hasRowHeader = true
+        if (p.children) check(p.children as React.ReactNode)
+      })
+    }
+    check(children as React.ReactNode)
+    if (hasRowHeader) return children as React.ReactNode
+
+    const childArray = React.Children.toArray(children as React.ReactNode)
+    if (childArray.length === 0) return children as React.ReactNode
+
+    // Case 2: <TableHeader><TableRow><TableHead ...> -> single Row wrapping Columns
+    const first = childArray[0] as React.ReactElement<Record<string, unknown>>
+    const firstProps = (first?.props ?? {}) as Record<string, unknown> & { children?: React.ReactNode }
+    const isRowWrapper =
+      first?.type === RowPrimitive ||
+      (firstProps.children != null && React.Children.toArray(firstProps.children as React.ReactNode).length > 1)
+
+    if (isRowWrapper && firstProps.children) {
+      const rowChildren = React.Children.toArray(firstProps.children as React.ReactNode)
+      if (rowChildren.length > 0) {
+        const firstCol = rowChildren[0] as React.ReactElement<Record<string, unknown>>
+        const clonedFirstCol = React.cloneElement(firstCol, { isRowHeader: true } as Record<string, unknown>)
+        const newRowChildren = [clonedFirstCol, ...rowChildren.slice(1)]
+        const clonedRow = React.cloneElement(first, undefined, ...newRowChildren)
+        return [clonedRow, ...childArray.slice(1)] as unknown as React.ReactNode
+      }
+    }
+
+    // Case 1: <TableHeader><TableHead ...><TableHead ...>
+    const firstCol = childArray[0] as React.ReactElement<Record<string, unknown>>
+    const clonedFirst = React.cloneElement(firstCol, { isRowHeader: true } as Record<string, unknown>)
+    return [clonedFirst, ...childArray.slice(1)] as unknown as React.ReactNode
+  }, [children])
+
   return (
     <TableHeaderPrimitive
       data-slot="table-header"
       className={cn("[&_tr]:border-b", className)}
       {...props}
-    />
+    >
+      {enhancedChildren as React.ReactNode}
+    </TableHeaderPrimitive>
   )
 }
 

@@ -2,6 +2,15 @@
 -- BIODENTIS - Schema SQL Generado desde Prisma
 -- Base de datos: PostgreSQL
 -- Fecha: 2026-09-06
+-- Ultima revision: 2026-09-07 (Fases 3-7 de seguridad)
+-- ============================================================
+--
+-- CAMBIOS DE SEGURIDAD (Fases 3-7):
+--   - Tabla refresh_tokens: soporta rotacion, revocacion, jti unico
+--   - Tokens: access (sub+jti, 15min) + refresh (jti, 7d, httpOnly cookie)
+--   - Rate limiting y account lockout: manejados en memoria (no en DB)
+--   - CORS, headers de seguridad, HTTPS: manejados en middleware
+--   - Roles: verificados contra DB en cada operacion sensible
 -- ============================================================
 
 -- ============================================================

@@ -7,6 +7,8 @@ import { cn } from "@workspace/ui/lib/utils";
 import { Button } from "@workspace/ui/components/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useSidebar } from "@/components/layout/sidebar-context";
+import { UserAvatar } from "@/components/ui/user-avatar";
+import { useProfile } from "@/hooks/use-queries";
 import {
   Calendar,
   Users,
@@ -18,6 +20,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  User,
 } from "lucide-react";
 
 const navItems = [
@@ -28,17 +31,19 @@ const navItems = [
   { href: "/clinical-records", label: "Historial Clínico", icon: FileText, roles: ["ADMIN", "DENTIST", "PATIENT"] },
   { href: "/users", label: "Usuarios", icon: Shield, roles: ["ADMIN"] },
   { href: "/config", label: "Configuración", icon: Settings, roles: ["ADMIN"] },
+  { href: "/profile", label: "Mi Perfil", icon: User, roles: ["ADMIN", "RECEPTIONIST", "DENTIST", "PATIENT"] },
 ];
 
 function SidebarNav({ onNavClick }: { onNavClick?: () => void }) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const { isCollapsed } = useSidebar();
+  const { data: profile } = useProfile();
   const filteredNav = navItems.filter((item) => user?.role && item.roles.includes(user.role));
 
   return (
     <>
-      <nav className="flex-1 space-y-1 p-2">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-2">
         {filteredNav.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
@@ -64,10 +69,22 @@ function SidebarNav({ onNavClick }: { onNavClick?: () => void }) {
       </nav>
 
       <div className={cn("border-t p-4", isCollapsed && "px-2")}>
-        {!isCollapsed && user && (
-          <div className="mb-2 text-sm">
-            <p className="font-medium truncate">{user.firstName} {user.lastName}</p>
-            <p className="text-muted-foreground text-xs truncate">{user.role}</p>
+        {user && (
+          <div className={cn("mb-2 flex items-center gap-2", isCollapsed && "justify-center")}>
+            <UserAvatar
+              firstName={profile?.firstName ?? user.firstName}
+              lastName={profile?.lastName ?? user.lastName}
+              avatarUrl={profile?.avatarUrl}
+              size="sm"
+            />
+            {!isCollapsed && (
+              <div className="min-w-0 text-sm">
+                <p className="truncate font-medium">
+                  {user.firstName} {user.lastName}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">{user.role}</p>
+              </div>
+            )}
           </div>
         )}
         <Button
@@ -116,7 +133,10 @@ export function Sidebar() {
       {/* Desktop sidebar (tablet compact / laptop+ expanded) */}
       <aside
         className={cn(
-          "hidden lg:flex h-full flex-col border-r bg-card transition-all duration-200 ease-in-out",
+          // `h-screen sticky` en vez de `h-full`: el padre es `min-h-screen` sin
+          // altura explícita, así que `h-full` colapsaba la barra a media página.
+          // `shrink-0` evita que el contenido la comprima.
+          "hidden lg:flex sticky top-0 h-screen shrink-0 flex-col border-r bg-card transition-all duration-200 ease-in-out",
           sidebarWidth
         )}
       >

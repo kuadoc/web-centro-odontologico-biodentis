@@ -5,11 +5,15 @@ import { useSidebar } from "@/components/layout/sidebar-context";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { ThemeSelector } from "@/components/theme-selector";
-import { Menu, User } from "lucide-react";
+import { UserAvatar } from "@/components/ui/user-avatar";
+import { useProfile } from "@/hooks/use-queries";
+import { Menu } from "lucide-react";
 
 export function Header() {
   const { user } = useAuth();
   const { setMobileOpen } = useSidebar();
+  // La foto vive en el perfil, no en el token: se lee de la caché de react-query.
+  const { data: profile } = useProfile();
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-card/80 backdrop-blur-xl px-4 sm:px-6">
@@ -34,9 +38,12 @@ export function Header() {
             <span className="text-sm font-medium leading-tight">{user?.firstName} {user?.lastName}</span>
             <span className="text-xs text-muted-foreground leading-tight">{user?.email}</span>
           </div>
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <User className="h-4 w-4" />
-          </div>
+          <UserAvatar
+            firstName={profile?.firstName ?? user?.firstName}
+            lastName={profile?.lastName ?? user?.lastName}
+            avatarUrl={profile?.avatarUrl}
+            size="sm"
+          />
         </div>
       </div>
     </header>
