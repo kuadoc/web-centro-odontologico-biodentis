@@ -20,6 +20,17 @@ export class UserService {
     return userRepository.update(userId, data);
   }
 
+  async updatePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await userRepository.findById(userId);
+    if (!user) throw new NotFoundError("Usuario no encontrado");
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) throw new ValidationError("Contraseña actual incorrecta");
+    if (newPassword.length < 8) throw new ValidationError("La nueva contraseña debe tener al menos 8 caracteres");
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await userRepository.updatePassword(userId, passwordHash);
+    return { success: true };
+  }
+
   async getAll(role?: string) {
     return userRepository.findMany(role ? { role: role as Role } : undefined);
   }
@@ -34,6 +45,7 @@ export class UserService {
     firstName: string;
     lastName: string;
     phone?: string;
+    address?: string;
     role: Role;
   }) {
     const existing = await userRepository.findByEmail(data.email);
@@ -50,6 +62,7 @@ export class UserService {
       firstName: data.firstName,
       lastName: data.lastName,
       phone: data.phone,
+      address: data.address,
     });
 
     if (data.role === "DENTIST") {
@@ -64,7 +77,7 @@ export class UserService {
     return rest;
   }
 
-  async update(userId: string, data: { firstName?: string; lastName?: string; phone?: string; role?: Role }) {
+  async update(userId: string, data: { firstName?: string; lastName?: string; phone?: string; address?: string; role?: Role; isActive?: boolean }) {
     const user = await userRepository.findById(userId);
     if (!user) throw new NotFoundError("Usuario no encontrado");
     return userRepository.update(userId, data);

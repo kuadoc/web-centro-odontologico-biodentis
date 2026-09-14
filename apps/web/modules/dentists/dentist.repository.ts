@@ -9,7 +9,10 @@ export class DentistRepository {
   }
 
   async findByUserId(userId: string) {
-    return prisma.dentist.findUnique({ where: { userId } });
+    return prisma.dentist.findUnique({
+      where: { userId },
+      include: { user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } } },
+    });
   }
 
   async findAll() {

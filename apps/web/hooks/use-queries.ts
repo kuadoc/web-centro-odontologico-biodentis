@@ -1,18 +1,85 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
-import type { Appointment, Dentist, User, DentalUnit, EmailTemplate, SystemSetting, Clinic } from "@biodentis/shared-types";
+import type { Appointment, Dentist, User, DentalUnit, EmailTemplate, SystemSetting, Clinic, MyProfile, SessionInfo, DashboardOverview, DashboardAgenda, AgendaRow, WaitingRoomRow, PatientList, PatientStats, PatientDetail } from "@biodentis/shared-types";
 
 // ─── Query Keys ────────────────────────────────────────────────
 export const queryKeys = {
   appointments: ["appointments"] as const,
   appointmentDetail: (id: string) => ["appointments", id] as const,
   dentists: ["dentists"] as const,
+  dentistMe: ["dentist", "me"] as const,
   users: ["users"] as const,
   usersByRole: (role: string) => ["users", role] as const,
+  patients: ["patients"] as const,
+  patientDetail: (id: string) => ["patients", "detail", id] as const,
+  patientStats: ["patients", "stats"] as const,
   clinic: ["clinic"] as const,
   clinicalRecords: (patientId: string) =>
     ["clinical-records", patientId] as const,
+  profile: ["profile"] as const,
+  myProfile: ["profile", "full"] as const,
+  sessions: ["profile", "sessions"] as const,
 } as const;
+
+// ─── Dashboard ─────────────────────────────────────────────────
+export const dashboardKeys = {
+  overview: (date?: string) => ["dashboard", "overview", date ?? "today"] as const,
+  agenda: (filters: Record<string, string | number | undefined>) =>
+    ["dashboard", "agenda", filters] as const,
+  waitingRoom: (date?: string) => ["dashboard", "waiting-room", date ?? "today"] as const,
+} as const;
+
+/** Serializa filtros a query string, omitiendo los vacíos. */
+function toQuery(params: object): string {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== "");
+  return entries.length ? "?" + new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString() : "";
+}
+
+export function useDashboardOverview(date?: string) {
+  return useQuery({
+    queryKey: dashboardKeys.overview(date),
+    queryFn: () => api.get<DashboardOverview>(`/api/dashboard${toQuery({ date })}`),
+    // El panel del dia cambia solo: refresco cada minuto.
+    refetchInterval: 60_000,
+  });
+}
+
+export function useDashboardAgenda(filters: { date?: string; status?: string; page?: number; pageSize?: number }) {
+  return useQuery({
+    queryKey: dashboardKeys.agenda(filters),
+    queryFn: () => api.get<DashboardAgenda>(`/api/dashboard/agenda${toQuery(filters)}`),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useWaitingRoom(date?: string) {
+  return useQuery({
+    queryKey: dashboardKeys.waitingRoom(date),
+    queryFn: () => api.get<WaitingRoomRow[]>(`/api/dashboard/waiting-room${toQuery({ date })}`),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useCallNextPatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ called: AgendaRow | null; message?: string }>("/api/dashboard/waiting-room/call-next", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useCheckInPatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, priority }: { id: string; priority?: string }) =>
+      api.patch(`/api/appointments/${id}/check-in`, { priority }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
 
 // ─── Appointments ──────────────────────────────────────────────
 export function useAppointments(filters?: Record<string, string>) {
@@ -76,6 +143,89 @@ export function useDentists() {
   });
 }
 
+export function useDentistMe() {
+  return useQuery({
+    queryKey: queryKeys.dentistMe,
+    queryFn: () => api.get<Dentist & { user: User }>("/api/dentists/me"),
+  });
+}
+
+// ─── Profile (Mi Perfil) ───────────────────────────────────────
+export function useProfile() {
+  return useQuery({
+    queryKey: queryKeys.profile,
+    queryFn: () => api.get<User>("/api/users/me"),
+  });
+}
+
+/** Perfil completo: usuario + ficha profesional + horario semanal real. */
+export function useMyProfile() {
+  return useQuery({
+    queryKey: queryKeys.myProfile,
+    queryFn: () => api.get<MyProfile>("/api/profile"),
+  });
+}
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      phone?: string | null;
+      secondaryPhone?: string | null;
+      firstName?: string;
+      lastName?: string;
+      address?: string | null;
+      avatarUrl?: string | null;
+    }) => api.patch("/api/profile", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.profile });
+      qc.invalidateQueries({ queryKey: queryKeys.myProfile });
+    },
+  });
+}
+
+export function useUpdatePassword() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { currentPassword: string; newPassword: string; confirmPassword?: string }) =>
+      api.patch("/api/profile/password", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.sessions });
+    },
+  });
+}
+
+// ─── Sesiones activas ──────────────────────────────────────────
+export function useMySessions() {
+  return useQuery({
+    queryKey: queryKeys.sessions,
+    queryFn: () => api.get<SessionInfo[]>("/api/profile/sessions"),
+  });
+}
+
+export function useRevokeOtherSessions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.del("/api/profile/sessions"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.sessions });
+    },
+  });
+}
+
+/** Datos profesionales del odontologo (solo ADMIN). `userId` es el User.id. */
+export function useUpdateDentistProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, data }: { userId: string; data: unknown }) =>
+      api.patch(`/api/dentists/${userId}/profile`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.dentists });
+      qc.invalidateQueries({ queryKey: queryKeys.myProfile });
+    },
+  });
+}
+
 // ─── Users ─────────────────────────────────────────────────────
 export function useUsers(role?: string) {
   const params = role ? `?role=${role}` : "";
@@ -113,6 +263,84 @@ export function useDeleteUser() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users });
     },
+  });
+}
+
+// ─── Patients (directorio administrativo) ──────────────────────
+export interface PatientFilters {
+  search?: string;
+  /** "active" | "inactive" */
+  status?: string;
+  /** "with" | "without" */
+  appointments?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** Listado paginado: el filtrado y la paginación ocurren en el servidor. */
+export function usePatients(filters: PatientFilters = {}) {
+  return useQuery({
+    queryKey: [...queryKeys.patients, filters],
+    queryFn: () => api.get<PatientList>(`/api/patients${toQuery(filters)}`),
+    placeholderData: (prev) => prev,
+  });
+}
+
+/** KPIs del encabezado. Se calculan sobre toda la base, no sobre la página visible. */
+export function usePatientStats() {
+  return useQuery({
+    queryKey: queryKeys.patientStats,
+    queryFn: () => api.get<PatientStats>("/api/patients/stats"),
+  });
+}
+
+export function usePatientDetail(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.patientDetail(id ?? ""),
+    queryFn: () => api.get<PatientDetail>(`/api/patients/${id}`),
+    enabled: !!id,
+  });
+}
+
+/** Invalida listado, KPIs y detalle tras cualquier escritura. */
+function invalidatePatients(qc: ReturnType<typeof useQueryClient>, id?: string) {
+  qc.invalidateQueries({ queryKey: queryKeys.patients });
+  qc.invalidateQueries({ queryKey: queryKeys.patientStats });
+  if (id) qc.invalidateQueries({ queryKey: queryKeys.patientDetail(id) });
+}
+
+export function useCreatePatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) => api.post("/api/patients", data),
+    onSuccess: () => invalidatePatients(qc),
+  });
+}
+
+export function useUpdatePatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: unknown }) =>
+      api.patch(`/api/patients/${id}`, data),
+    onSuccess: (_, { id }) => invalidatePatients(qc, id),
+  });
+}
+
+/** Activa o desactiva la cuenta; el motivo queda en el registro de auditoría. */
+export function useSetPatientActive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, isActive, reason }: { id: string; isActive: boolean; reason?: string }) =>
+      api.patch(`/api/patients/${id}/status`, { isActive, reason }),
+    onSuccess: (_, { id }) => invalidatePatients(qc, id),
+  });
+}
+
+/** Descarga el CSV del listado filtrado completo (no solo la página visible). */
+export function useExportPatients() {
+  return useMutation({
+    mutationFn: (filters: PatientFilters) =>
+      api.download(`/api/patients/export${toQuery(filters)}`, "pacientes.csv"),
   });
 }
 

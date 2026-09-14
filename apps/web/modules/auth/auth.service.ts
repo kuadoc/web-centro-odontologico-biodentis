@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { nextPatientCode } from "@/lib/patient-code";
 import bcrypt from "bcrypt";
 import { RegisterSchema, LoginSchema } from "@biodentis/shared-validators";
 import { generateAccessToken, generateRefreshToken, hashToken, verifyRefreshToken } from "@/lib/auth";
@@ -22,6 +23,7 @@ export class AuthService {
         email: parsed.email,
         passwordHash,
         role: "PATIENT",
+        patientCode: await nextPatientCode(),
         firstName: parsed.firstName,
         lastName: parsed.lastName,
         phone: parsed.phone,

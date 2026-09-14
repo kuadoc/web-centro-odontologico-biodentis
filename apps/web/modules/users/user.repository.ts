@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { nextPatientCode } from "@/lib/patient-code";
 import { Role } from "@biodentis/shared-types";
 
 export class UserRepository {
@@ -13,7 +14,7 @@ export class UserRepository {
   async findMany(filter?: { role?: Role }) {
     return prisma.user.findMany({
       where: filter?.role ? { role: filter.role } : undefined,
-      select: { id: true, email: true, role: true, firstName: true, lastName: true, phone: true, createdAt: true },
+      select: { id: true, email: true, role: true, firstName: true, lastName: true, phone: true, address: true, isActive: true, createdAt: true, updatedAt: true },
       orderBy: { createdAt: "desc" },
     });
   }
@@ -36,12 +37,19 @@ export class UserRepository {
     firstName: string;
     lastName: string;
     phone?: string;
+    address?: string;
   }) {
-    return prisma.user.create({ data });
+    // Los pacientes reciben su codigo visible (#PAC-0001) al darse de alta.
+    const patientCode = data.role === "PATIENT" ? await nextPatientCode() : undefined;
+    return prisma.user.create({ data: { ...data, patientCode } });
   }
 
-  async update(id: string, data: { firstName?: string; lastName?: string; phone?: string; role?: Role }) {
+  async update(id: string, data: { firstName?: string; lastName?: string; phone?: string; address?: string; role?: Role; isActive?: boolean }) {
     return prisma.user.update({ where: { id }, data });
+  }
+
+  async updatePassword(id: string, passwordHash: string) {
+    return prisma.user.update({ where: { id }, data: { passwordHash } });
   }
 
   async delete(id: string) {

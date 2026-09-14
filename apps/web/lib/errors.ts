@@ -68,6 +68,18 @@ export function handleApiError(error: unknown): Response {
     return Response.json({ error: error.message }, { status: error.statusCode });
   }
 
+  // Zod validation errors -> 400 con el detalle por campo
+  if (error instanceof Error && error.name === "ZodError") {
+    const issues = (error as unknown as { issues?: Array<{ path: (string | number)[]; message: string }> }).issues ?? [];
+    return Response.json(
+      {
+        error: issues[0]?.message ?? "Input inválido",
+        fields: issues.map((i) => ({ field: i.path.join("."), message: i.message })),
+      },
+      { status: 400 }
+    );
+  }
+
   // JWT errors from jsonwebtoken library
   if (error instanceof Error && (error.name === "TokenExpiredError" || error.name === "JsonWebTokenError" || error.name === "NotBeforeError")) {
     return Response.json({ error: "Sesión expirada" }, { status: 401 });

@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import { Card, CardContent } from "@workspace/ui/components/card";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
+import { formatDate } from "@workspace/ui/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import {
   useAppointments,
   useDentists,
+  useUsers,
   useCreateAppointment,
   useConfirmAppointment,
   useCancelAppointment,
@@ -19,6 +21,7 @@ export default function AppointmentsPage() {
   const { user } = useAuth();
   const { data: appointmentsData, isLoading: appointmentsLoading } = useAppointments();
   const { data: dentistsData } = useDentists();
+  const { data: patientsData } = useUsers("PATIENT");
 
   const appointments = useMemo(
     () => (Array.isArray(appointmentsData) ? appointmentsData : []),
@@ -27,6 +30,10 @@ export default function AppointmentsPage() {
   const dentists = useMemo(
     () => (Array.isArray(dentistsData) ? dentistsData : []),
     [dentistsData]
+  );
+  const patients = useMemo(
+    () => (Array.isArray(patientsData) ? patientsData : []),
+    [patientsData]
   );
 
   const filteredAppointments = useMemo(
@@ -40,14 +47,23 @@ export default function AppointmentsPage() {
   const completeMutation = useCompleteAppointment();
 
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ dentistId: "", date: "", startTime: "", endTime: "", notes: "" });
+  const [form, setForm] = useState({ patientId: "", dentistId: "", date: "", startTime: "", endTime: "", notes: "" });
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await createMutation.mutateAsync(form);
+      // For RECEPTIONIST/ADMIN, patientId is required; for PATIENT it's optional (backend uses token)
+      const payload: Record<string, string> = {
+        dentistId: form.dentistId,
+        date: form.date,
+        startTime: form.startTime,
+        endTime: form.endTime,
+      };
+      if (form.notes) payload.notes = form.notes;
+      if (form.patientId) payload.patientId = form.patientId;
+      await createMutation.mutateAsync(payload);
       setShowForm(false);
-      setForm({ dentistId: "", date: "", startTime: "", endTime: "", notes: "" });
+      setForm({ patientId: "", dentistId: "", date: "", startTime: "", endTime: "", notes: "" });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Error al crear cita");
     }
@@ -72,6 +88,9 @@ export default function AppointmentsPage() {
   };
 
   const canManage = user?.role === "ADMIN" || user?.role === "RECEPTIONIST" || user?.role === "DENTIST";
+  const isReceptionistOrAdmin = user?.role === "ADMIN" || user?.role === "RECEPTIONIST";
+  const isDentist = user?.role === "DENTIST";
+  const isPatient = user?.role === "PATIENT";
 
   if (appointmentsLoading) {
     return (
@@ -88,7 +107,7 @@ export default function AppointmentsPage() {
           <h2 className="text-2xl font-bold">Citas</h2>
           <p className="text-muted-foreground">Gestión de citas odontológicas</p>
         </div>
-        {canManage && (
+        {(canManage || isPatient) && (
           <Button onPress={() => setShowForm(!showForm)} className="hidden sm:inline-flex">
             <Plus className="mr-2 h-4 w-4" />
             {showForm ? "Cancelar" : "Nueva Cita"}
@@ -100,6 +119,24 @@ export default function AppointmentsPage() {
         <Card>
           <CardContent className="p-4">
             <form onSubmit={handleCreate} className="space-y-4">
+              {isReceptionistOrAdmin && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Paciente *</label>
+                  <select
+                    className="flex h-8 w-full items-center justify-between rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none"
+                    value={form.patientId}
+                    onChange={(e) => setForm({ ...form, patientId: e.target.value })}
+                    required={isReceptionistOrAdmin}
+                  >
+                    <option value="">Seleccionar paciente...</option>
+                    {patients.map((p: { id: string; firstName: string; lastName: string; email: string }) => (
+                      <option key={p.id} value={p.id}>
+                        {p.firstName} {p.lastName} - {p.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Odontólogo</label>
                 <select
@@ -188,7 +225,7 @@ export default function AppointmentsPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="text-sm font-medium">{apt.date}</p>
+                      <p className="text-sm font-medium">{formatDate(apt.date)}</p>
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         {apt.startTime} - {apt.endTime}
@@ -244,7 +281,7 @@ export default function AppointmentsPage() {
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    {apt.date}
+                    {formatDate(apt.date)}
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
@@ -277,7 +314,7 @@ export default function AppointmentsPage() {
       </div>
 
       {/* Mobile FAB */}
-      {canManage && (
+      {(canManage || isPatient) && (
         <button
           onClick={() => setShowForm(!showForm)}
           className="fixed bottom-6 right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95 sm:hidden"
