@@ -43,3 +43,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Archivos de Claude Code
+.claude/
+CLAUDE.md
+
+# Evidencias de pruebas E2E (Selenium)
+apps/web/tests/e2e/evidencias/
+**/evidencias/*.png

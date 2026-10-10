@@ -42,10 +42,23 @@ export const CreateClinicalRecordSchema = z.object({
   notes: z.string().min(1, "Notas requeridas"),
 });
 
+export const CompleteAppointmentSchema = z.object({
+  diagnosis: z.string().trim().min(1, "El diagnóstico es requerido").max(2000),
+  treatment: z.string().trim().min(1, "El tratamiento es requerido").max(2000),
+});
+
 export const ConfigureAvailabilitySchema = z.object({
   dayOfWeek: z.number().min(0).max(6),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
+});
+
+export const ReplaceWeeklyAvailabilitySchema = z.object({
+  days: z
+    .array(ConfigureAvailabilitySchema)
+    .max(7, "Maximo 7 dias")
+    .refine((d) => new Set(d.map((x) => x.dayOfWeek)).size === d.length, "Dias duplicados")
+    .refine((d) => d.every((x) => x.startTime < x.endTime), "La hora de fin debe ser posterior al inicio"),
 });
 
 export const UpdateClinicSchema = z.object({
@@ -107,12 +120,31 @@ export const BulkUpdateSettingsSchema = z.object({
   })),
 });
 
-export const AddScheduleExceptionSchema = z.object({
-  dentistId: z.string().uuid(),
-  startDate: z.string().datetime(),
-  endDate: z.string().datetime(),
-  reason: z.string().optional(),
-  scope: ExceptionScopeSchema.default("DENTIST"),
+export const AddScheduleExceptionSchema = z
+  .object({
+    dentistId: z.string().uuid().optional(),
+    dentalUnitId: z.string().uuid().optional(),
+    startDate: z.string().datetime(),
+    endDate: z.string().datetime(),
+    reason: z.string().optional(),
+    scope: ExceptionScopeSchema.default("DENTIST"),
+  })
+  .superRefine((val, ctx) => {
+    if (val.scope === "DENTIST" && !val.dentistId) {
+      ctx.addIssue({ code: "custom", path: ["dentistId"], message: "dentistId requerido para scope DENTIST" });
+    }
+    if (val.scope === "UNIT" && !val.dentalUnitId) {
+      ctx.addIssue({ code: "custom", path: ["dentalUnitId"], message: "dentalUnitId requerido para scope UNIT" });
+    }
+  });
+
+export const ListScheduleExceptionsQuerySchema = z.object({
+  dentistId: z.string().uuid().optional(),
+  dentalUnitId: z.string().uuid().optional(),
+  scope: ExceptionScopeSchema.optional(),
+  status: ExceptionStatusSchema.optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
 });
 
 export const UpdateScheduleExceptionSchema = z.object({

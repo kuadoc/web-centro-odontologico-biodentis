@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     }
     // ADMIN y RECEPTIONIST ven todas (sin filtro adicional), salvo filtros query
 
-    const appointments = await appointmentService.getAll(filters);
+    const appointments = await appointmentService.getAll(filters, user.role);
     return Response.json(appointments);
   } catch (error) {
     return handleApiError(error);
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       patientId = body.patientId;
     }
 
-    const appointment = await appointmentService.create(body, patientId);
+    const appointment = await appointmentService.create(body, patientId, user.role as Role);
     return Response.json(appointment, { status: 201 });
   } catch (error) {
     return handleApiError(error);

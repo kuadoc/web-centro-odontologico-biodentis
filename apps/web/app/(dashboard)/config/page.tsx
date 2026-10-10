@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@workspace/ui/components/card";
 import { Button } from "@workspace/ui/components/button";
 import { Badge } from "@workspace/ui/components/badge";
+import { Pagination } from "@workspace/ui/components/pagination";
+import { usePagination } from "@workspace/ui/hooks/use-pagination";
 import { useAuth } from "@/hooks/use-auth";
 import {
   useFullConfig,
@@ -21,6 +23,13 @@ import {
   useUpdateJwtSettings,
   useNotificationSettings,
   useUpdateNotificationSettings,
+  useDentists,
+  useClinicExceptions,
+  useCreateClinicException,
+  useDentistAvailability,
+  useReplaceDentistAvailability,
+  type ClinicException,
+  type WeeklyAvailability,
 } from "@/hooks/use-queries";
 import { Settings, Building2, CalendarClock, Bell, Shield, FileSearch, Save, Plus, Trash2, Pencil } from "lucide-react";
 
@@ -255,7 +264,290 @@ function GeneralTab() {
   );
 }
 
+const SCOPE_LABELS = {
+  DENTIST: "Receso de odontologo",
+  CLINIC: "Feriado de clinica",
+  UNIT: "Mantenimiento de unidad",
+} as const;
+
+const EMPTY_EXCEPTION_FORM = { scope: "CLINIC", dentistId: "", dentalUnitId: "", startDate: "", endDate: "", reason: "" };
+
+const DAY_LABELS = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
+// Orden de visualizacion: lunes a domingo
+const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const TIME_INPUT_CLASS =
+  "flex h-8 w-28 rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus:border-primary transition-colors disabled:opacity-50";
+
+type DaySchedule = { enabled: boolean; startTime: string; endTime: string };
+type WeekState = Record<number, DaySchedule>;
+
+function buildWeek(days: WeeklyAvailability[] | undefined): WeekState {
+  const week: WeekState = {};
+  for (const d of DAY_ORDER) {
+    const found = days?.find((x) => x.dayOfWeek === d);
+    week[d] = found
+      ? { enabled: true, startTime: found.startTime, endTime: found.endTime }
+      : { enabled: false, startTime: "09:00", endTime: "18:00" };
+  }
+  return week;
+}
+
+function WeekScheduleEditor({
+  initial,
+  onSave,
+  isSaving,
+}: {
+  initial: WeeklyAvailability[] | undefined;
+  onSave: (days: WeeklyAvailability[]) => Promise<unknown>;
+  isSaving: boolean;
+}) {
+  const [week, setWeek] = useState<WeekState>(() => buildWeek(initial));
+  const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    setWeek(buildWeek(initial));
+  }, [initial]);
+
+  const update = (day: number, patch: Partial<DaySchedule>) => {
+    setMessage(null);
+    setWeek((w) => ({ ...w, [day]: { ...w[day]!, ...patch } }));
+  };
+
+  const handleSave = async () => {
+    const days = DAY_ORDER.filter((d) => week[d]!.enabled).map((d) => ({
+      dayOfWeek: d,
+      startTime: week[d]!.startTime,
+      endTime: week[d]!.endTime,
+    }));
+    if (days.some((d) => !d.startTime || !d.endTime || d.startTime >= d.endTime)) {
+      setMessage({ type: "error", text: "La hora de fin debe ser posterior a la de inicio" });
+      return;
+    }
+    try {
+      await onSave(days);
+      setMessage({ type: "ok", text: "Horario guardado" });
+    } catch (err) {
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "Error al guardar" });
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="divide-y rounded-lg border">
+        {DAY_ORDER.map((d) => {
+          const day = week[d]!;
+          return (
+            <div key={d} className="flex flex-wrap items-center gap-3 p-3">
+              <label className="flex w-36 items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={day.enabled}
+                  onChange={(e) => update(d, { enabled: e.target.checked })}
+                />
+                {DAY_LABELS[d]}
+              </label>
+              {day.enabled ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="time"
+                    aria-label={`Hora de inicio ${DAY_LABELS[d]}`}
+                    className={TIME_INPUT_CLASS}
+                    value={day.startTime}
+                    onChange={(e) => update(d, { startTime: e.target.value })}
+                  />
+                  a
+                  <input
+                    type="time"
+                    aria-label={`Hora de fin ${DAY_LABELS[d]}`}
+                    className={TIME_INPUT_CLASS}
+                    value={day.endTime}
+                    onChange={(e) => update(d, { endTime: e.target.value })}
+                  />
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground">Cerrado / sin atencion</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-end gap-3">
+        {message && (
+          <p className={`text-sm ${message.type === "ok" ? "text-emerald-600" : "text-destructive"}`}>{message.text}</p>
+        )}
+        <Button size="sm" onClick={handleSave} isDisabled={isSaving}>
+          <Save className="h-4 w-4 mr-1" />
+          {isSaving ? "Guardando..." : "Guardar horario"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function parseGeneralHours(raw: string | null | undefined): WeeklyAvailability[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as WeeklyAvailability[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function ClinicHoursCard() {
+  const { data: config } = useFullConfig();
+  const updateClinic = useUpdateClinic();
+  const clinic = (config as { clinic?: { generalHours?: string | null } } | undefined)?.clinic;
+  const initial = useMemo(() => parseGeneralHours(clinic?.generalHours), [clinic?.generalHours]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Horario de apertura de la clinica</CardTitle>
+        <CardDescription>Dias y horas en que la clinica atiende pacientes.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <WeekScheduleEditor
+          initial={initial}
+          isSaving={updateClinic.isPending}
+          onSave={(days) => updateClinic.mutateAsync({ generalHours: JSON.stringify(days) })}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function DentistHoursCard() {
+  const { data: dentists } = useDentists();
+  const [dentistId, setDentistId] = useState("");
+  const { data: availability, isLoading } = useDentistAvailability(dentistId);
+  const replace = useReplaceDentistAvailability(dentistId);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Disponibilidad semanal por odontologo</CardTitle>
+        <CardDescription>Turnos fijos semanales que determinan los horarios reservables de cada profesional.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="max-w-xs space-y-1.5">
+          <label className="text-xs font-semibold">Odontologo</label>
+          <select
+            className="flex h-8 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus:border-primary transition-colors"
+            value={dentistId}
+            onChange={(e) => setDentistId(e.target.value)}
+          >
+            <option value="">Selecciona...</option>
+            {dentists?.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.user.firstName} {d.user.lastName}
+              </option>
+            ))}
+          </select>
+        </div>
+        {!dentistId ? (
+          <p className="text-sm text-muted-foreground">Selecciona un odontologo para editar su horario.</p>
+        ) : isLoading ? (
+          <p className="text-sm text-muted-foreground">Cargando...</p>
+        ) : (
+          <WeekScheduleEditor
+            key={dentistId}
+            initial={availability ?? []}
+            isSaving={replace.isPending}
+            onSave={(days) => replace.mutateAsync(days)}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function HorarioBaseSection() {
+  return (
+    <>
+      <ClinicHoursCard />
+      <DentistHoursCard />
+    </>
+  );
+}
+
+const HORARIO_SUBTABS = [
+  { id: "base", label: "Horario Base de Atencion" },
+  { id: "excepciones", label: "Excepciones y Bloqueos" },
+] as const;
+
 function HorariosTab() {
+  const [sub, setSub] = useState<(typeof HORARIO_SUBTABS)[number]["id"]>("base");
+  return (
+    <>
+      <div role="tablist" className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
+        {HORARIO_SUBTABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={sub === t.id}
+            onClick={() => setSub(t.id)}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              sub === t.id ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {sub === "base" ? <HorarioBaseSection /> : <ExcepcionesSection />}
+    </>
+  );
+}
+
+function ExcepcionesSection() {
+  const { data: exceptions, isLoading } = useClinicExceptions();
+  const { data: dentists } = useDentists();
+  const { data: units } = useDentalUnits();
+  const createException = useCreateClinicException();
+
+  const exceptionList = exceptions ?? [];
+  const pagination = usePagination(exceptionList, 5);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(EMPTY_EXCEPTION_FORM);
+  const [error, setError] = useState<string | null>(null);
+
+  const inputClass =
+    "flex h-8 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus:border-primary transition-colors";
+
+  const targetName = (e: ClinicException) => {
+    if (e.scope === "CLINIC") return "Toda la clinica";
+    if (e.scope === "UNIT") return units?.find((u) => u.id === e.dentalUnitId)?.name ?? "Unidad";
+    const d = dentists?.find((x) => x.id === e.dentistId);
+    return d ? `${d.user.firstName} ${d.user.lastName}` : "Odontologo";
+  };
+
+  const handleSubmit = () => {
+    setError(null);
+    if (!form.startDate || !form.endDate) {
+      setError("Indica fecha de inicio y fin");
+      return;
+    }
+    createException.mutate(
+      {
+        scope: form.scope,
+        dentistId: form.scope === "DENTIST" ? form.dentistId || undefined : undefined,
+        dentalUnitId: form.scope === "UNIT" ? form.dentalUnitId || undefined : undefined,
+        // Dias completos: de 00:00 del inicio a 23:59 del fin
+        startDate: new Date(`${form.startDate}T00:00:00`).toISOString(),
+        endDate: new Date(`${form.endDate}T23:59:59`).toISOString(),
+        reason: form.reason || undefined,
+      },
+      {
+        onSuccess: () => {
+          setForm(EMPTY_EXCEPTION_FORM);
+          setShowForm(false);
+        },
+        onError: (err) => setError(err.message),
+      }
+    );
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -264,14 +556,110 @@ function HorariosTab() {
             <CardTitle>Horarios y Excepciones Clinicas</CardTitle>
             <CardDescription>Gestion de feriados, recesos medicos y mantenimiento de equipamiento.</CardDescription>
           </div>
-          <Button size="sm">
+          <Button size="sm" onClick={() => setShowForm((v) => !v)}>
             <Plus className="h-4 w-4 mr-1" />
             Nueva Excepcion
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">Gestion de horarios base y excepciones por odontologo.</p>
+      <CardContent className="space-y-4">
+        {showForm && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-lg border p-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Tipo</label>
+              <select className={inputClass} value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value })}>
+                {Object.entries(SCOPE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {form.scope === "DENTIST" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold">Odontologo</label>
+                <select className={inputClass} value={form.dentistId} onChange={(e) => setForm({ ...form, dentistId: e.target.value })}>
+                  <option value="">Selecciona...</option>
+                  {dentists?.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.user.firstName} {d.user.lastName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {form.scope === "UNIT" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold">Unidad dental</label>
+                <select className={inputClass} value={form.dentalUnitId} onChange={(e) => setForm({ ...form, dentalUnitId: e.target.value })}>
+                  <option value="">Selecciona...</option>
+                  {units?.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Desde</label>
+              <input type="date" className={inputClass} value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Hasta</label>
+              <input type="date" className={inputClass} value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+            </div>
+            <div className="md:col-span-2 space-y-1.5">
+              <label className="text-xs font-semibold">Motivo</label>
+              <input className={inputClass} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+            </div>
+            {error && <p className="md:col-span-2 text-sm text-destructive">{error}</p>}
+            <div className="md:col-span-2 flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={() => setShowForm(false)}>
+                Cancelar
+              </Button>
+              <Button size="sm" onClick={handleSubmit} isDisabled={createException.isPending}>
+                <Save className="h-4 w-4 mr-1" />
+                Guardar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Cargando...</p>
+        ) : !exceptions?.length ? (
+          <p className="text-sm text-muted-foreground">No hay excepciones registradas.</p>
+        ) : (
+          <div className="space-y-2">
+            {pagination.pageItems.map((e) => (
+              <div key={e.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
+                <div>
+                  <p className="font-medium">
+                    {targetName(e)} · {SCOPE_LABELS[e.scope]}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(e.startDate).toLocaleDateString()} - {new Date(e.endDate).toLocaleDateString()}
+                    {e.reason ? ` · ${e.reason}` : ""}
+                  </p>
+                </div>
+                <Badge variant="secondary">{e.status}</Badge>
+              </div>
+            ))}
+            <div className="overflow-hidden rounded-lg border">
+              <Pagination
+                page={pagination.page}
+                pageSize={pagination.pageSize}
+                total={pagination.total}
+                totalPages={pagination.totalPages}
+                onPageChange={pagination.setPage}
+                onPageSizeChange={pagination.setPageSize}
+                pageSizeOptions={[5, 10, 25]}
+                label="excepciones"
+              />
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -422,7 +810,7 @@ function SeguridadTab() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Politica de Contrasenas</CardTitle>
+          <CardTitle>Politica de Contraseñas</CardTitle>
           <CardDescription>Parametros criptograficos y reglas de longitud exigidas para odontologos y administradores.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

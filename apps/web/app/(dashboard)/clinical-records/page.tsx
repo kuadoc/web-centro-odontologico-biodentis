@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
+import { Pagination } from "@workspace/ui/components/pagination";
+import { usePagination } from "@workspace/ui/hooks/use-pagination";
 import { useAuth } from "@/hooks/use-auth";
 import { useAppointments } from "@/hooks/use-queries";
 import { FileText, Calendar } from "lucide-react";
@@ -26,6 +28,8 @@ export default function ClinicalRecordsPage() {
       .map((a) => (a as unknown as { clinicalRecord: ClinicalRecord }).clinicalRecord);
   }, [appointmentsData]);
 
+  const pagination = usePagination(records, 10);
+
   if (isLoading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -49,7 +53,7 @@ export default function ClinicalRecordsPage() {
             </CardContent>
           </Card>
         ) : (
-          records.map((record) => (
+          pagination.pageItems.map((record) => (
             <Card key={record.id}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -77,6 +81,20 @@ export default function ClinicalRecordsPage() {
           ))
         )}
       </div>
+
+      {records.length > 0 && (
+        <Card className="overflow-hidden">
+          <Pagination
+            page={pagination.page}
+            pageSize={pagination.pageSize}
+            total={pagination.total}
+            totalPages={pagination.totalPages}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+            label="registros"
+          />
+        </Card>
+      )}
     </div>
   );
 }

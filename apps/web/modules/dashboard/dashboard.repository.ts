@@ -25,6 +25,8 @@ export interface AgendaFilter {
   to: Date;
   dentistId?: string;
   status?: AppointmentStatus;
+  /** Restriccion de visibilidad por rol; se combina (AND) con `status`. */
+  statuses?: AppointmentStatus[];
   skip?: number;
   take?: number;
 }
@@ -35,7 +37,12 @@ export class DashboardRepository {
       date: { gte: filter.from, lte: filter.to },
       ...(filter.dentistId ? { dentistId: filter.dentistId } : {}),
       ...(filter.status ? { status: filter.status } : {}),
+      ...(filter.statuses && !filter.status ? { status: { in: filter.statuses } } : {}),
     };
+    // Si piden un estado concreto fuera de la restriccion, no hay resultados.
+    if (filter.status && filter.statuses && !filter.statuses.includes(filter.status)) {
+      return { items: [], total: 0 };
+    }
 
     const [items, total] = await Promise.all([
       prisma.appointment.findMany({
@@ -52,11 +59,12 @@ export class DashboardRepository {
   }
 
   /** Conteo por estado en el rango, en una sola consulta agrupada. */
-  async countByStatus(from: Date, to: Date, dentistId?: string) {
+  async countByStatus(from: Date, to: Date, dentistId?: string, statuses?: AppointmentStatus[]) {
     return prisma.appointment.groupBy({
       by: ["status"],
       where: {
         date: { gte: from, lte: to },
+        ...(statuses ? { status: { in: statuses } } : {}),
         ...(dentistId ? { dentistId } : {}),
       },
       _count: { _all: true },
@@ -64,11 +72,11 @@ export class DashboardRepository {
   }
 
   /** Citas no canceladas del rango con el precio del tratamiento, para estimar ingresos. */
-  async findBillableAppointments(from: Date, to: Date, dentistId?: string) {
+  async findBillableAppointments(from: Date, to: Date, dentistId?: string, statuses?: AppointmentStatus[]) {
     return prisma.appointment.findMany({
       where: {
         date: { gte: from, lte: to },
-        status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        status: statuses ? { in: statuses } : { notIn: ["CANCELLED", "NO_SHOW"] },
         ...(dentistId ? { dentistId } : {}),
       },
       select: { status: true, treatment: { select: { price: true } } },
@@ -76,12 +84,12 @@ export class DashboardRepository {
   }
 
   /** Pacientes presentes en la clinica hoy (llegaron y aun no terminan). */
-  async findWaitingRoom(from: Date, to: Date, dentistId?: string) {
+  async findWaitingRoom(from: Date, to: Date, dentistId?: string, statuses?: AppointmentStatus[]) {
     return prisma.appointment.findMany({
       where: {
         date: { gte: from, lte: to },
         waitingStatus: { in: ["WAITING", "TRIAGE", "IN_CHAIR"] },
-        status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        status: statuses ? { in: statuses } : { notIn: ["CANCELLED", "NO_SHOW"] },
         ...(dentistId ? { dentistId } : {}),
       },
       include: AGENDA_INCLUDE,
@@ -91,12 +99,12 @@ export class DashboardRepository {
   }
 
   /** Siguiente paciente a llamar: mayor prioridad y que lleve mas tiempo esperando. */
-  async findNextToCall(from: Date, to: Date, dentistId?: string) {
+  async findNextToCall(from: Date, to: Date, dentistId?: string, statuses?: AppointmentStatus[]) {
     return prisma.appointment.findFirst({
       where: {
         date: { gte: from, lte: to },
         waitingStatus: { in: ["WAITING", "TRIAGE"] },
-        status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        status: statuses ? { in: statuses } : { notIn: ["CANCELLED", "NO_SHOW"] },
         ...(dentistId ? { dentistId } : {}),
       },
       include: AGENDA_INCLUDE,

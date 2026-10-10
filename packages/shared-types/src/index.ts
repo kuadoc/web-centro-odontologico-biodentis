@@ -106,6 +106,8 @@ export interface Appointment {
   updatedAt: string;
   patient?: User;
   dentist?: Dentist;
+  /** Nota clínica post-atención (solo si la cita ya tiene registro). */
+  clinicalRecord?: { notes: string } | null;
 }
 
 export interface ClinicalRecord {

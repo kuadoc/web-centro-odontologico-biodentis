@@ -10,11 +10,25 @@ export class AvailabilityRepository {
     return prisma.availability.findMany({ where: { dentistId, dayOfWeek } });
   }
 
+  async findByDentist(dentistId: string) {
+    return prisma.availability.findMany({ where: { dentistId }, orderBy: { dayOfWeek: "asc" } });
+  }
+
+  async replaceWeek(dentistId: string, days: { dayOfWeek: number; startTime: string; endTime: string }[]) {
+    return prisma.$transaction([
+      prisma.availability.deleteMany({ where: { dentistId } }),
+      prisma.availability.createMany({ data: days.map((d) => ({ dentistId, ...d })) }),
+    ]);
+  }
+
+  /** Excepcion (del dentista o de toda la clinica) que se solapa con el dia `date` (00:00 UTC). */
   async findException(dentistId: string, date: Date) {
+    const dayEnd = new Date(date.getTime() + 24 * 60 * 60 * 1000);
     return prisma.scheduleException.findFirst({
       where: {
-        dentistId,
-        startDate: { lte: date },
+        OR: [{ dentistId }, { scope: "CLINIC" }],
+        status: { not: "CANCELLED" },
+        startDate: { lt: dayEnd },
         endDate: { gte: date },
       },
     });

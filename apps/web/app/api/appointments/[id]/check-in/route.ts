@@ -14,7 +14,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const scope = await resolveDashboardScope(request);
     const { id } = await params;
     const body = (await request.json().catch(() => ({}))) as { priority?: "NORMAL" | "URGENT" | "EMERGENCY" };
-    const updated = await dashboardService.checkIn(id, body.priority, scope.dentistId);
+    const updated = await dashboardService.checkIn(id, body.priority, scope.dentistId, scope.role);
     return Response.json(updated);
   } catch (error) {
     return handleApiError(error);
