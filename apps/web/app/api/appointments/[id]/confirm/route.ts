@@ -12,7 +12,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireRole(request, [Role.DENTIST, Role.RECEPTIONIST, Role.ADMIN]);
+    await requireRole(request, [Role.RECEPTIONIST, Role.ADMIN]);
     const { id } = await params;
     const appointment = await appointmentService.confirm(id);
 

@@ -92,6 +92,20 @@ export function useAppointments(filters?: Record<string, string>) {
   });
 }
 
+export interface AvailableSlot {
+  startTime: string;
+  endTime: string;
+}
+
+/** Bloques libres de un odontologo en una fecha (YYYY-MM-DD). */
+export function useAvailableSlots(dentistId: string, date: string) {
+  return useQuery({
+    queryKey: ["dentists", dentistId, "slots", date] as const,
+    queryFn: () => api.get<AvailableSlot[]>(`/api/dentists/${dentistId}/availability?date=${date}`),
+    enabled: !!dentistId && !!date,
+  });
+}
+
 export function useCreateAppointment() {
   const qc = useQueryClient();
   return useMutation({
@@ -135,11 +149,45 @@ export function useCompleteAppointment() {
   });
 }
 
+export function useCompleteWithNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, diagnosis, treatment }: { id: string; diagnosis: string; treatment: string }) =>
+      api.patch(`/api/appointments/${id}/complete`, { diagnosis, treatment }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.appointments });
+    },
+  });
+}
+
 // ─── Dentists ──────────────────────────────────────────────────
 export function useDentists() {
   return useQuery({
     queryKey: queryKeys.dentists,
     queryFn: () => api.get<Dentist[]>("/api/dentists"),
+  });
+}
+
+export interface WeeklyAvailability {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
+
+export function useDentistAvailability(dentistId: string) {
+  return useQuery({
+    queryKey: ["dentists", dentistId, "availability"] as const,
+    queryFn: () => api.get<WeeklyAvailability[]>(`/api/dentists/${dentistId}/availability`),
+    enabled: !!dentistId,
+  });
+}
+
+export function useReplaceDentistAvailability(dentistId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (days: WeeklyAvailability[]) =>
+      api.put<WeeklyAvailability[]>(`/api/dentists/${dentistId}/availability`, { days }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dentists", dentistId, "availability"] }),
   });
 }
 
@@ -367,6 +415,7 @@ export const configKeys = {
   full: ["config"] as const,
   general: ["config", "general"] as const,
   dentalUnits: ["config", "dental-units"] as const,
+  exceptions: ["config", "exceptions"] as const,
   emailTemplates: ["config", "email-templates"] as const,
   security: ["config", "security"] as const,
   jwt: ["config", "jwt"] as const,
@@ -537,6 +586,36 @@ export function useUpdateNotificationSettings() {
     mutationFn: (data: unknown) => api.put("/api/config/notifications", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: configKeys.notifications });
+    },
+  });
+}
+
+// ---- Excepciones clínicas (feriados, recesos, mantenimiento) ----
+
+export interface ClinicException {
+  id: string;
+  scope: "DENTIST" | "CLINIC" | "UNIT";
+  status: "PENDING" | "CONFIRMED" | "CANCELLED";
+  dentistId: string | null;
+  dentalUnitId: string | null;
+  startDate: string;
+  endDate: string;
+  reason: string | null;
+}
+
+export function useClinicExceptions() {
+  return useQuery({
+    queryKey: configKeys.exceptions,
+    queryFn: () => api.get<ClinicException[]>("/api/config/exceptions"),
+  });
+}
+
+export function useCreateClinicException() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) => api.post<ClinicException>("/api/config/exceptions", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: configKeys.exceptions });
     },
   });
 }

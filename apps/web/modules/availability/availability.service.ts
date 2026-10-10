@@ -1,12 +1,13 @@
 import { AvailabilityRepository, AvailableSlot } from "./availability.repository";
-import { ConfigureAvailabilitySchema, AddScheduleExceptionSchema } from "@biodentis/shared-validators";
+import { ConfigureAvailabilitySchema, ReplaceWeeklyAvailabilitySchema, AddScheduleExceptionSchema } from "@biodentis/shared-validators";
 
 const availabilityRepository = new AvailabilityRepository();
 
 export class AvailabilityService {
   async getAvailableSlots(dentistId: string, dateStr: string): Promise<AvailableSlot[]> {
     const date = new Date(dateStr);
-    const dayOfWeek = date.getDay();
+    // dateStr es YYYY-MM-DD (UTC): usar getUTCDay evita desfases por zona horaria.
+    const dayOfWeek = date.getUTCDay();
 
     const exception = await availabilityRepository.findException(dentistId, date);
     if (exception) return [];
@@ -23,7 +24,20 @@ export class AvailabilityService {
     const bookedAppointments = await availabilityRepository.findBookedAppointments(dentistId, date);
     const bookedTimes = new Set(bookedAppointments.map((a) => a.startTime));
 
-    return allSlots.filter((slot) => !bookedTimes.has(slot.startTime));
+    const now = new Date();
+    return allSlots.filter(
+      (slot) => !bookedTimes.has(slot.startTime) && new Date(`${dateStr}T${slot.startTime}:00`) > now,
+    );
+  }
+
+  async getWeekly(dentistId: string) {
+    return availabilityRepository.findByDentist(dentistId);
+  }
+
+  async replaceWeekly(dentistId: string, data: unknown) {
+    const parsed = ReplaceWeeklyAvailabilitySchema.parse(data);
+    await availabilityRepository.replaceWeek(dentistId, parsed.days);
+    return availabilityRepository.findByDentist(dentistId);
   }
 
   async configure(dentistId: string, data: unknown) {

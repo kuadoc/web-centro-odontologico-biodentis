@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 import { Card, CardContent } from "@workspace/ui/components/card";
+import { Pagination } from "@workspace/ui/components/pagination";
+import { usePagination } from "@workspace/ui/hooks/use-pagination";
 import { Badge } from "@workspace/ui/components/badge";
 import { useDentists } from "@/hooks/use-queries";
 import { Stethoscope, Mail, Phone } from "lucide-react";
@@ -13,6 +15,8 @@ export default function DentistsPage() {
     () => (Array.isArray(dentistsData) ? dentistsData : []),
     [dentistsData]
   );
+
+  const pagination = usePagination(dentists, 6);
 
   if (isLoading) {
     return (
@@ -37,7 +41,7 @@ export default function DentistsPage() {
             </CardContent>
           </Card>
         ) : (
-          dentists.map((dentist) => (
+          pagination.pageItems.map((dentist) => (
             <Card key={dentist.id}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
@@ -71,6 +75,21 @@ export default function DentistsPage() {
           ))
         )}
       </div>
+
+      {dentists.length > 0 && (
+        <Card className="overflow-hidden">
+          <Pagination
+            page={pagination.page}
+            pageSize={pagination.pageSize}
+            total={pagination.total}
+            totalPages={pagination.totalPages}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+            pageSizeOptions={[6, 12, 24]}
+            label="odontólogos"
+          />
+        </Card>
+      )}
     </div>
   );
 }

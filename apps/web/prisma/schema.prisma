@@ -137,16 +137,19 @@ model Availability {
 
 model ScheduleException {
   id        String           @id @default(uuid())
-  dentistId String
+  dentistId    String?
+  dentalUnitId String?
   startDate DateTime
   endDate   DateTime
   reason    String?
   scope     ExceptionScope   @default(DENTIST)
   status    ExceptionStatus  @default(PENDING)
 
-  dentist Dentist @relation(fields: [dentistId], references: [id])
+  dentist    Dentist?    @relation(fields: [dentistId], references: [id])
+  dentalUnit DentalUnit? @relation(fields: [dentalUnitId], references: [id])
 
   @@unique([dentistId, startDate])
+  @@index([dentalUnitId])
   @@map("schedule_exceptions")
 }
 
@@ -304,6 +307,7 @@ model DentalUnit {
 
   dentists     Dentist[]
   appointments Appointment[]
+  scheduleExceptions ScheduleException[]
 
   @@map("dental_units")
 }

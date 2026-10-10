@@ -1,7 +1,13 @@
 import { DashboardRepository } from "./dashboard.repository";
 import { SystemSettingService } from "@/modules/system-settings/system-setting.service";
 import { NotFoundError, DomainError, AuthorizationError } from "@/lib/errors";
-import type { AppointmentStatus } from "@biodentis/shared-types";
+import { Role, type AppointmentStatus } from "@biodentis/shared-types";
+import { DENTIST_VISIBLE_STATUSES } from "@biodentis/shared-validators";
+
+/** HU-12: estados visibles segun rol (solo el odontologo esta restringido). */
+function visibleStatusesFor(role?: Role): AppointmentStatus[] | undefined {
+  return role === Role.DENTIST ? DENTIST_VISIBLE_STATUSES : undefined;
+}
 
 const dashboardRepository = new DashboardRepository();
 const systemSettingService = new SystemSettingService();
@@ -95,7 +101,8 @@ export class DashboardService {
    * Resumen del dia: KPIs, desglose de estados, tratamientos activos e insumos bajos.
    * `dentistId` acota el panel al odontologo que lo consulta.
    */
-  async getOverview(options: { date?: string; dentistId?: string } = {}) {
+  async getOverview(options: { date?: string; dentistId?: string; role?: Role } = {}) {
+    const visible = visibleStatusesFor(options.role);
     const today = dayRange(options.date);
     const yesterday = shiftDays(today, -1);
 
@@ -109,10 +116,10 @@ export class DashboardService {
       lowStock,
       goalSetting,
     ] = await Promise.all([
-      dashboardRepository.countByStatus(today.from, today.to, options.dentistId),
-      dashboardRepository.countByStatus(yesterday.from, yesterday.to, options.dentistId),
-      dashboardRepository.findBillableAppointments(today.from, today.to, options.dentistId),
-      dashboardRepository.findBillableAppointments(yesterday.from, yesterday.to, options.dentistId),
+      dashboardRepository.countByStatus(today.from, today.to, options.dentistId, visible),
+      dashboardRepository.countByStatus(yesterday.from, yesterday.to, options.dentistId, visible),
+      dashboardRepository.findBillableAppointments(today.from, today.to, options.dentistId, visible),
+      dashboardRepository.findBillableAppointments(yesterday.from, yesterday.to, options.dentistId, visible),
       dashboardRepository.countActivePlans(options.dentistId),
       dashboardRepository.groupActivePlansByCategory(options.dentistId),
       dashboardRepository.findLowStockItems(),
@@ -202,6 +209,7 @@ export class DashboardService {
     status?: string;
     page?: number;
     pageSize?: number;
+    role?: Role;
   } = {}) {
     const { from, to } = dayRange(options.date);
     const page = Math.max(1, options.page ?? 1);
@@ -212,6 +220,8 @@ export class DashboardService {
       to,
       dentistId: options.dentistId,
       status: options.status as AppointmentStatus | undefined,
+      // HU-12: el odontologo nunca ve citas PENDING ni CANCELLED.
+      statuses: visibleStatusesFor(options.role),
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
@@ -226,9 +236,9 @@ export class DashboardService {
   }
 
   /** Sala de espera con minutos de espera calculados al vuelo. */
-  async getWaitingRoom(options: { date?: string; dentistId?: string } = {}) {
+  async getWaitingRoom(options: { date?: string; dentistId?: string; role?: Role } = {}) {
     const { from, to } = dayRange(options.date);
-    const rows = await dashboardRepository.findWaitingRoom(from, to, options.dentistId);
+    const rows = await dashboardRepository.findWaitingRoom(from, to, options.dentistId, visibleStatusesFor(options.role));
     const now = Date.now();
 
     return rows.map((apt) => {
@@ -249,12 +259,17 @@ export class DashboardService {
   async checkIn(
     appointmentId: string,
     priority?: "NORMAL" | "URGENT" | "EMERGENCY",
-    restrictToDentistId?: string
+    restrictToDentistId?: string,
+    role?: Role
   ) {
     const appointment = await dashboardRepository.findAppointmentById(appointmentId);
     if (!appointment) throw new NotFoundError("Cita no encontrada");
     if (restrictToDentistId && appointment.dentistId !== restrictToDentistId) {
       throw new AuthorizationError("Esta cita no pertenece a tu agenda");
+    }
+    const visible = visibleStatusesFor(role);
+    if (visible && !visible.includes(appointment.status as AppointmentStatus)) {
+      throw new AuthorizationError("Esta cita aun no esta confirmada por Recepcion");
     }
     if (appointment.status === "CANCELLED") {
       throw new DomainError("La cita está cancelada");
@@ -272,9 +287,9 @@ export class DashboardService {
   }
 
   /** Llama al siguiente paciente en espera y lo pasa al sillon. */
-  async callNext(options: { date?: string; dentistId?: string } = {}) {
+  async callNext(options: { date?: string; dentistId?: string; role?: Role } = {}) {
     const { from, to } = dayRange(options.date);
-    const next = await dashboardRepository.findNextToCall(from, to, options.dentistId);
+    const next = await dashboardRepository.findNextToCall(from, to, options.dentistId, visibleStatusesFor(options.role));
     if (!next) return null;
 
     const updated = await dashboardRepository.updateWaiting(next.id, {

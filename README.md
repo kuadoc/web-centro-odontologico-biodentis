@@ -30,11 +30,6 @@ web-centro-odontologico-biodentis/
 
 ### 1. Clonar el repositorio
 
-```bash
-git clone https://github.com/tu-usuario/web-centro-odontologico-biodentis.git
-cd web-centro-odontologico-biodentis
-```
-
 ### 2. Instalar dependencias
 
 ```bash

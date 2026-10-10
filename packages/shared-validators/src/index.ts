@@ -14,9 +14,12 @@ export {
   RescheduleAppointmentSchema,
   AppointmentStatusUpdateSchema,
   CreateClinicalRecordSchema,
+  CompleteAppointmentSchema,
   ConfigureAvailabilitySchema,
+  ReplaceWeeklyAvailabilitySchema,
   AddScheduleExceptionSchema,
   UpdateScheduleExceptionSchema,
+  ListScheduleExceptionsQuerySchema,
   UpdateClinicSchema,
   DateRangeSchema,
   CreateDentalUnitSchema,
@@ -38,6 +41,7 @@ export {
   canCancelOrReschedule,
   isValidTimeRange,
   isValidTransition,
+  DENTIST_VISIBLE_STATUSES,
   VALID_TRANSITIONS,
 } from "./rules";
 export {

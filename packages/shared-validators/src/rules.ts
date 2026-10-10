@@ -26,3 +26,9 @@ export const VALID_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> =
 export function isValidTransition(from: AppointmentStatus, to: AppointmentStatus): boolean {
   return VALID_TRANSITIONS[from]?.includes(to) ?? false;
 }
+
+/** HU-12: el odontologo solo ve citas ya validadas por Recepcion o atendidas. */
+export const DENTIST_VISIBLE_STATUSES: AppointmentStatus[] = [
+  AppointmentStatus.CONFIRMED,
+  AppointmentStatus.COMPLETED,
+];

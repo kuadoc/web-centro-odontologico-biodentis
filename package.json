@@ -17,8 +17,10 @@
   "devDependencies": {
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
+    "mocha": "^12.0.3",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
+    "selenium-webdriver": "^4.50.0",
     "turbo": "^2.9.18",
     "typescript": "^5"
   },

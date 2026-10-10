@@ -17,7 +17,8 @@
     "db:push": "npx prisma db push",
     "db:migrate": "npx prisma migrate dev",
     "db:seed": "npx prisma db seed",
-    "db:studio": "npx prisma studio"
+    "db:studio": "npx prisma studio",
+    "test:e2e": "mocha --import tsx --extension ts tests/e2e/appointment-happy-path.spec.ts"
   },
   "dependencies": {
     "@biodentis/shared-types": "workspace:*",
@@ -48,6 +49,10 @@
     "@workspace/typescript-config": "workspace:*",
     "eslint": "^9",
     "tsx": "^4.23.13",
-    "typescript": "^5"
+    "typescript": "^5",
+    "selenium-webdriver": "^4.27.0",
+    "@types/selenium-webdriver": "^4.1.27",
+    "mocha": "^11.0.0",
+    "@types/mocha": "^10.0.10"
   }
 }
