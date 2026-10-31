@@ -1,0 +1,55 @@
+.shell { min-height: 100svh; display: grid; grid-template-columns: 44% minmax(0, 1fr); background: var(--muted); color: var(--foreground); font-family: var(--font-sans), sans-serif; font-size: 14px; line-height: 1.5; }
+.shell *, .shell *::before, .shell *::after { box-sizing: border-box; }
+.shell a { text-decoration: none; }
+.shell a:focus-visible { outline: 3px solid var(--ring); outline-offset: 4px; border-radius: 3px; }
+.brandPanel { display: flex; flex-direction: column; justify-content: space-between; gap: 64px; min-height: 100svh; padding: 48px; background: oklch(.205 0 0); color: oklch(.985 0 0); }
+.brand { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: fit-content; color: inherit; }
+.brand > span:last-child { margin-left: 45px; font-family: var(--font-mono), monospace; font-size: 9px; letter-spacing: .1em; color: oklch(.708 0 0); }
+.brandContent { display: flex; flex-direction: column; gap: 22px; max-width: 420px; margin-block: auto; }
+.eyebrow { font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .1em; color: oklch(.708 0 0); }
+.brandContent h2 { margin: 0; font-size: clamp(28px, 2.85vw, 40px); font-weight: 650; line-height: 1.15; letter-spacing: -.035em; text-wrap: balance; }
+.brandContent > p { margin: 0; color: oklch(.76 0 0); font-size: 14px; line-height: 1.8; max-width: 37ch; }
+.benefits { display: flex; flex-direction: column; gap: 16px; padding: 0; margin: 8px 0 0; list-style: none; }
+.benefits li { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.benefits li > span { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border: 1px solid oklch(1 0 0 / 6%); border-radius: 10px; background: oklch(.269 0 0); color: oklch(.94 0 0); }
+.brandFooter { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 11px; color: oklch(.708 0 0); }
+.formPanel { display: flex; flex-direction: column; min-width: 0; padding: 28px 48px 24px; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 36px; }
+.backLink { display: inline-flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 12px; }
+.backLink:hover { color: var(--foreground); }
+.mobileBrand { display: none; color: var(--foreground); }
+.cardArea { display: flex; align-items: center; justify-content: center; flex: 1; padding-block: 40px; }
+.card { width: 100%; max-width: 400px; padding: 32px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--card-foreground); box-shadow: 0 2px 8px -6px oklch(0 0 0 / 15%); }
+.registerCard { max-width: 432px; }
+.cardHeading { margin-bottom: 26px; }
+.cardHeading h1 { margin: 0 0 6px; font-size: 24px; line-height: 1.3; font-weight: 700; letter-spacing: -.025em; }
+.cardHeading p { margin: 0; font-size: 14px; line-height: 1.65; color: var(--muted-foreground); }
+.patientBadge { display: inline-flex; align-items: center; gap: 6px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 999px; padding: 4px 9px; font-size: 10px; font-family: var(--font-mono), monospace; letter-spacing: .04em; margin-bottom: 16px; }
+.form { display: flex; flex-direction: column; gap: 18px; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field > label, .passwordLabel label { font-size: 14px; font-weight: 500; line-height: 1.5; }
+.field input { color: var(--foreground); background: var(--background); }
+.field input:disabled { opacity: .6; }
+.nameFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.passwordLabel { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.passwordLabel a { color: var(--muted-foreground); font-size: 11px; text-decoration: underline; text-underline-offset: 3px; }
+.passwordLabel a:hover { color: var(--foreground); }
+.passwordField { position: relative; }
+.passwordInput { padding-right: 38px; }
+.passwordToggle { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); color: var(--muted-foreground); }
+.passwordToggle:active { transform: translateY(-50%); }
+.hint { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.6; }
+.optional { font-size: 11px; font-weight: 400; color: var(--muted-foreground); }
+.submit { width: 100%; min-height: 36px; margin-top: 6px; font-size: 14px; }
+.switch { margin: 24px 0 0; padding-top: 22px; border-top: 1px solid var(--border); color: var(--muted-foreground); text-align: center; font-size: 13px; line-height: 1.8; }
+.switch a { color: var(--foreground); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.error { padding: 11px 12px; border: 1px solid color-mix(in oklch, var(--destructive) 25%, transparent); border-radius: 8px; background: color-mix(in oklch, var(--destructive) 7%, var(--card)); color: var(--destructive); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.help { display: flex; justify-content: center; align-items: baseline; flex-wrap: wrap; gap: 5px; font-size: 11px; color: var(--muted-foreground); text-align: center; }
+.help a { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
+.spinner { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (min-width: 1600px) { .brandPanel { padding: 64px; } .brandContent { max-width: 480px; } .brandContent h2 { font-size: 44px; } }
+@media (max-width: 1100px) { .brandPanel { padding: 36px; } .formPanel { padding-inline: 32px; } .brandFooter { flex-direction: column; gap: 6px; } .benefits li { font-size: 12px; } .brandContent { gap: 20px; } }
+@media (max-width: 850px) { .shell { grid-template-columns: 1fr; } .brandPanel { display: none; } .formPanel { min-height: 100svh; padding: 20px 24px; } .backLink { display: none; } .mobileBrand { display: inline-flex; } .cardArea { padding-block: 36px; } .help { padding-bottom: 6px; } }
+@media (max-width: 420px) { .formPanel { padding: 16px; } .card { padding: 26px 22px; } .cardHeading h1 { font-size: 23px; } .cardHeading p { font-size: 13px; } .field input { min-height: 38px; font-size: 16px; } .nameFields { gap: 10px; } .passwordLabel a { font-size: 10px; } .switch { font-size: 12px; } .cardArea { padding-block: 28px; } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }

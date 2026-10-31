@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@workspace/ui/components/button";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Camera, Trash2 } from "lucide-react";
@@ -13,26 +13,28 @@ const MAX_INPUT_BYTES = 8 * 1024 * 1024;
 const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
 
 /**
- * Recorta la imagen al cuadrado central y la reescala a 256x256 JPEG.
+ * Genera un avatar de 256×256 o un retrato profesional de 640×768 JPEG.
  *
  * Se hace en el navegador para no subir un archivo de varios MB: lo que viaja
- * al backend es un data URL de ~20 KB que cabe sin problema en la columna
+ * al backend es un data URL comprimido que se guarda en la columna
  * `users.avatarUrl`, sin necesidad de almacenamiento de objetos.
  */
-async function toSquareDataUrl(file: File): Promise<string> {
+async function toProfileDataUrl(file: File, portrait: boolean): Promise<string> {
   const bitmap = await createImageBitmap(file);
-  const side = Math.min(bitmap.width, bitmap.height);
-  const sx = (bitmap.width - side) / 2;
-  const sy = (bitmap.height - side) / 2;
+  const ratio = portrait ? 5 / 6 : 1;
+  const cropWidth = Math.min(bitmap.width, bitmap.height * ratio);
+  const cropHeight = cropWidth / ratio;
+  const sx = (bitmap.width - cropWidth) / 2;
+  const sy = (bitmap.height - cropHeight) / 2;
 
   const canvas = document.createElement("canvas");
-  canvas.width = OUTPUT_SIZE;
-  canvas.height = OUTPUT_SIZE;
+  canvas.width = portrait ? 640 : OUTPUT_SIZE;
+  canvas.height = portrait ? 768 : OUTPUT_SIZE;
 
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("No se pudo procesar la imagen");
 
-  ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+  ctx.drawImage(bitmap, sx, sy, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
   bitmap.close();
 
   return canvas.toDataURL("image/jpeg", OUTPUT_QUALITY);
@@ -47,6 +49,9 @@ export interface AvatarPickerProps {
   onChange: (dataUrl: string | null) => Promise<void> | void;
   isSaving?: boolean;
   disabled?: boolean;
+  /** Preserva un retrato de 640×768 para el perfil público del odontólogo. */
+  portrait?: boolean;
+  onProcessingChange?: (processing: boolean) => void;
 }
 
 export function AvatarPicker({
@@ -56,6 +61,8 @@ export function AvatarPicker({
   onChange,
   isSaving = false,
   disabled = false,
+  portrait = false,
+  onProcessingChange,
 }: AvatarPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -64,6 +71,7 @@ export function AvatarPicker({
 
   const busy = processing || isSaving;
   const shown = preview ?? avatarUrl ?? null;
+  useEffect(() => setPreview(null), [avatarUrl]);
 
   const handleFile = async (file: File) => {
     setError(null);
@@ -78,8 +86,9 @@ export function AvatarPicker({
     }
 
     setProcessing(true);
+    onProcessingChange?.(true);
     try {
-      const dataUrl = await toSquareDataUrl(file);
+      const dataUrl = await toProfileDataUrl(file, portrait);
       setPreview(dataUrl);
       await onChange(dataUrl);
     } catch (e) {
@@ -87,6 +96,7 @@ export function AvatarPicker({
       setError(e instanceof Error ? e.message : "No se pudo procesar la imagen");
     } finally {
       setProcessing(false);
+      onProcessingChange?.(false);
     }
   };
 
@@ -111,7 +121,7 @@ export function AvatarPicker({
           lastName={lastName}
           avatarUrl={shown}
           size="xl"
-          className="shadow-inner"
+          className={portrait ? "h-36 w-30 rounded-xl" : "shadow-inner"}
         />
 
         {!disabled && (

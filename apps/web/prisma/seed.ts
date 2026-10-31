@@ -4,7 +4,14 @@ import bcrypt from "bcrypt";
 const prisma = new PrismaClient();
 
 async function main() {
-  const passwordHash = await bcrypt.hash("password123", 10);
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("El seed de demostración no se puede ejecutar en producción.");
+  }
+  const password = process.env.SEED_DEMO_PASSWORD;
+  if (!password || password.length < 12) {
+    throw new Error("Configura SEED_DEMO_PASSWORD con al menos 12 caracteres en el entorno local.");
+  }
+  const passwordHash = await bcrypt.hash(password, 12);
 
   await prisma.user.upsert({
     where: { email: "admin@biodentis.com" },
@@ -391,5 +398,8 @@ async function main() {
 }
 
 main()
-  .catch(console.error)
+  .catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
   .finally(() => prisma.$disconnect());

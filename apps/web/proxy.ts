@@ -5,6 +5,8 @@ const REFRESH_COOKIE_NAME = "refresh_token";
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "http://localhost:3001",
+  "https://biodentis.com",
+  "https://www.biodentis.com",
   "https://biodentis.cl",
   "https://www.biodentis.cl",
 ];

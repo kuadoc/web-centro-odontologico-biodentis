@@ -1,5 +1,7 @@
 "use client";
 
+import { ROLE_LABELS } from "@/lib/role-labels";
+
 import { useState, useMemo } from "react";
 import { Card, CardContent } from "@workspace/ui/components/card";
 import { Badge } from "@workspace/ui/components/badge";
@@ -185,7 +187,7 @@ export default function ProfilePage() {
           <span className={`h-2 w-2 rounded-full ${user.isActive ? "bg-primary animate-pulse" : "bg-destructive"}`} />
           <span className="font-medium">{user.isActive ? "Cuenta activa" : "Cuenta inactiva"}</span>
           <span className="text-muted-foreground">•</span>
-          <span className="font-semibold">{user.role}</span>
+          <span className="font-semibold">{ROLE_LABELS[user.role]}</span>
         </div>
       </div>
 
@@ -194,6 +196,7 @@ export default function ProfilePage() {
         <CardContent className="p-6 flex flex-col gap-6">
           <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
             <AvatarPicker
+              portrait={isDentist}
               firstName={user.firstName}
               lastName={user.lastName}
               avatarUrl={user.avatarUrl}
@@ -465,7 +468,7 @@ export default function ProfilePage() {
                     <span className="text-xs font-semibold">Estado de la cuenta</span>
                     <Award className="h-4 w-4 text-primary" />
                   </div>
-                  <p className="text-xs text-muted-foreground">Rol asignado: {user.role}</p>
+                  <p className="text-xs text-muted-foreground">Rol asignado: {ROLE_LABELS[user.role]}</p>
                   <div className="flex items-center gap-1.5 text-xs font-semibold">
                     <span className={`h-1.5 w-1.5 rounded-full ${user.isActive ? "bg-primary" : "bg-destructive"}`} />
                     Miembro desde: {new Date(user.createdAt).toLocaleDateString("es-PE")}

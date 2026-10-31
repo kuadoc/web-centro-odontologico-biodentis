@@ -31,7 +31,7 @@ function Pagination({
 
   return (
     <div className="flex flex-col items-center justify-between gap-4 border-t bg-muted/50 p-4 sm:flex-row">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
         <span className="text-xs text-muted-foreground">
           Mostrando {firstRow}-{lastRow} de {total} {label}
         </span>

@@ -8,6 +8,9 @@ import { ThemeSelector } from "@/components/theme-selector";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useProfile } from "@/hooks/use-queries";
 import { Menu } from "lucide-react";
+import Link from "next/link";
+import { BrandLogo } from "@/components/brand-logo";
+import { ROLE_LABELS } from "@/lib/role-labels";
 
 export function Header() {
   const { user } = useAuth();
@@ -27,12 +30,13 @@ export function Header() {
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <h1 className="text-lg font-semibold hidden sm:block">Panel de Control</h1>
+        <h1 className="text-lg font-semibold hidden sm:block">{user?.role === "PATIENT" ? "Portal del Paciente" : "Panel de Control"}</h1>
+        <Link href={user?.role === "PATIENT" ? "/appointments" : "/dashboard"} className="sm:hidden" aria-label={user?.role === "PATIENT" ? "Biodentis, mis citas" : "Biodentis, panel de control"}><BrandLogo compact /></Link>
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
         <ThemeSelector />
-        <Badge variant="secondary" className="hidden sm:inline-flex">{user?.role}</Badge>
+        <Badge variant="secondary" className="hidden sm:inline-flex">{user && ROLE_LABELS[user.role]}</Badge>
         <div className="flex items-center gap-2">
           <div className="hidden sm:flex flex-col items-end">
             <span className="text-sm font-medium leading-tight">{user?.firstName} {user?.lastName}</span>

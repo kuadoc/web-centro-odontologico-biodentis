@@ -75,6 +75,15 @@ export interface Dentist {
   user: User;
 }
 
+/** Datos profesionales publicados en la landing; excluye información privada. */
+export interface PublicDentist {
+  id: string;
+  specialty: string;
+  licenseNumber: string | null;
+  university: string | null;
+  user: Pick<User, "firstName" | "lastName" | "avatarUrl">;
+}
+
 export interface Availability {
   id: string;
   dentistId: string;
@@ -94,6 +103,7 @@ export interface ScheduleException {
 }
 
 export interface Appointment {
+  treatment?: { id: string; name: string; category: string; specialty?: { name: string } | null } | null;
   id: string;
   patientId: string;
   dentistId: string;
@@ -382,4 +392,55 @@ export interface PatientDetail {
   patient: Omit<PatientRow, "appointmentCount">;
   activity: PatientActivity;
   history: PatientHistoryRow[];
+}
+
+/** Catálogo público: solo información comercial, sin pacientes ni personal. */
+export interface PublicService {
+  id: string;
+  name: string;
+  category: string;
+  specialty: string;
+  description: string | null;
+  price: number | null;
+  durationMinutes: number | null;
+}
+
+export interface PublicServiceCatalog {
+  currency: "PEN";
+  services: PublicService[];
+}
+
+export interface CatalogDentist {
+  id: string;
+  name: string;
+}
+
+export interface CatalogService {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  price: number | null;
+  isActive: boolean;
+}
+
+export interface CatalogSpecialty {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  dentists: CatalogDentist[];
+  services: CatalogService[];
+  futureAppointments: number;
+}
+
+export interface AdminServiceCatalog {
+  specialties: CatalogSpecialty[];
+  dentists: CatalogDentist[];
+}
+
+export interface BookingSpecialty {
+  id: string;
+  name: string;
+  dentists: CatalogDentist[];
+  services: CatalogService[];
 }

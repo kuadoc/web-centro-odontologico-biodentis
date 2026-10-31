@@ -94,7 +94,7 @@ function Dialog({
             >
               <XIcon
               />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">Cerrar</span>
             </DialogClose>
           )}
         </DialogPrimitive>
@@ -131,7 +131,7 @@ function DialogFooter({
       {...props}
     >
       {children}
-      {showCloseButton && <DialogClose variant="outline">Close</DialogClose>}
+      {showCloseButton && <DialogClose variant="outline">Cerrar</DialogClose>}
     </div>
   )
 }

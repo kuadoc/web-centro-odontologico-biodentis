@@ -1,14 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@workspace/ui/components/card";
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Cargando formulario...</div>}>
+      <ResetPasswordForm />
+    </Suspense>
+  );
+}
+
+function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
@@ -72,7 +81,7 @@ export default function ResetPasswordPage() {
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">BIODENTIS</CardTitle>
+            <CardTitle className="text-2xl font-bold"><Link href="/" aria-label="Biodentis, inicio"><BrandLogo /></Link></CardTitle>
             <CardDescription>Contraseña actualizada</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -97,7 +106,7 @@ export default function ResetPasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">BIODENTIS</CardTitle>
+          <CardTitle className="text-2xl font-bold"><Link href="/" aria-label="Biodentis, inicio"><BrandLogo /></Link></CardTitle>
           <CardDescription>Nueva contraseña</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

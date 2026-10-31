@@ -1,6 +1,23 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 export class DentistRepository {
+  constructor(private readonly db: Prisma.TransactionClient = prisma) {}
+
+  async findPublicProfiles() {
+    return this.db.dentist.findMany({
+      where: { user: { role: "DENTIST", isActive: true } },
+      select: {
+        id: true,
+        specialty: true,
+        licenseNumber: true,
+        university: true,
+        user: { select: { firstName: true, lastName: true, avatarUrl: true } },
+      },
+      orderBy: [{ user: { firstName: "asc" } }, { user: { lastName: "asc" } }, { id: "asc" }],
+    });
+  }
+
   async findById(id: string) {
     return prisma.dentist.findUnique({
       where: { id },

@@ -145,21 +145,21 @@ export default function PatientDetailPage() {
               Resumen de Actividad
             </h3>
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg bg-muted p-3">
+              <div className="flex min-w-0 flex-col gap-2 rounded-lg bg-muted p-3">
                 <span className="text-xs text-muted-foreground">Total Citas</span>
-                <span className="mt-1 text-2xl font-bold">{activity?.totalAppointments ?? 0}</span>
+                <span className="text-2xl font-bold leading-none tabular-nums">{activity?.totalAppointments ?? 0}</span>
               </div>
-              <div className="rounded-lg bg-muted p-3">
+              <div className="flex min-w-0 flex-col gap-2 rounded-lg bg-muted p-3">
                 <span className="text-xs text-muted-foreground">Atendidas</span>
-                <span className="mt-1 text-2xl font-bold">{activity?.attended ?? 0}</span>
+                <span className="text-2xl font-bold leading-none tabular-nums">{activity?.attended ?? 0}</span>
               </div>
-              <div className="rounded-lg bg-muted p-3">
+              <div className="flex min-w-0 flex-col gap-2 rounded-lg bg-muted p-3">
                 <span className="text-xs text-muted-foreground">Canceladas</span>
-                <span className="mt-1 text-2xl font-bold">{activity?.cancelled ?? 0}</span>
+                <span className="text-2xl font-bold leading-none tabular-nums">{activity?.cancelled ?? 0}</span>
               </div>
-              <div className="rounded-lg bg-muted p-3">
+              <div className="flex min-w-0 flex-col gap-2 rounded-lg bg-muted p-3">
                 <span className="text-xs text-muted-foreground">Historial Clínico</span>
-                <span className="mt-1 text-2xl font-bold">{clinicalRecordsList.length}</span>
+                <span className="text-2xl font-bold leading-none tabular-nums">{clinicalRecordsList.length}</span>
               </div>
             </div>
           </CardContent>
@@ -180,12 +180,10 @@ export default function PatientDetailPage() {
             <div className="overflow-hidden rounded-lg border">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead isRowHeader>Fecha / Hora</TableHead>
-                    <TableHead>Odontólogo</TableHead>
-                    <TableHead>Servicio</TableHead>
-                    <TableHead className="text-right">Estado</TableHead>
-                  </TableRow>
+                  <TableHead isRowHeader>Fecha / Hora</TableHead>
+                  <TableHead>Odontólogo</TableHead>
+                  <TableHead>Servicio</TableHead>
+                  <TableHead className="text-right">Estado</TableHead>
                 </TableHeader>
                 <TableBody>
                   {history.map((appt) => (

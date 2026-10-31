@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
@@ -36,7 +37,7 @@ export default function ForgotPasswordPage() {
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">BIODENTIS</CardTitle>
+            <CardTitle className="text-2xl font-bold"><Link href="/" aria-label="Biodentis, inicio"><BrandLogo /></Link></CardTitle>
             <CardDescription>Correo enviado</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -61,7 +62,7 @@ export default function ForgotPasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">BIODENTIS</CardTitle>
+          <CardTitle className="text-2xl font-bold"><Link href="/" aria-label="Biodentis, inicio"><BrandLogo /></Link></CardTitle>
           <CardDescription>Recupera tu contraseña</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

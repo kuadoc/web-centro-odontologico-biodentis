@@ -7,14 +7,20 @@ import path from "node:path";
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const TIMEOUT = 15_000;
 
+function testPassword(name: string): string {
+  const value = process.env[name] || process.env.E2E_PASSWORD || process.env.SEED_DEMO_PASSWORD;
+  if (!value) throw new Error(`Configura ${name} o E2E_PASSWORD para ejecutar la prueba.`);
+  return value;
+}
+
 const USERS = {
-  patient: { email: "jhansmachuca@gmail.com", password: "password123" },
-  reception: { email: "recepcion@biodentis.com", password: "password123" },
-  dentist: { email: "dr.martinez@biodentis.com", password: "password123" },
+  patient: { email: process.env.E2E_PATIENT_EMAIL || "paciente@biodentis.com", password: testPassword("E2E_PATIENT_PASSWORD") },
+  reception: { email: process.env.E2E_RECEPTION_EMAIL || "recepcion@biodentis.com", password: testPassword("E2E_RECEPTION_PASSWORD") },
+  dentist: { email: process.env.E2E_DENTIST_EMAIL || "dr.martinez@biodentis.com", password: testPassword("E2E_DENTIST_PASSWORD") },
 };
 
-const PATIENT_NAME = "Jhanns Machuca";
-const DENTIST_NAME = "Martínez";
+const PATIENT_NAME = process.env.E2E_PATIENT_NAME || "Ana López";
+const DENTIST_NAME = process.env.E2E_DENTIST_NAME || "Martínez";
 const SYMPTOMS = "Dolor intenso en molar inferior, sensibilidad al frío y calor, posible endodoncia";
 const DIAGNOSIS = "Pulpitis irreversible en pieza 36";
 const TREATMENT = "Tratamiento de conducto (endodoncia) en pieza 36";
@@ -220,13 +226,14 @@ describe("Módulo de Citas - Camino Feliz (E2E)", function () {
     log(2, `Detalle de la cita de ${PATIENT_NAME} abierto`);
     await takeSnapshot('Fase3-01-DetalleCitaAbierto');
 
-    await waitVisible(xp("//*[contains(text(),'Registro de Nota Clínica')]"));
+    await waitVisible(xp("//*[contains(text(),'Registro de nota clínica')]"));
     await type(By.id("clinical-diagnosis"), DIAGNOSIS);
     await type(By.id("clinical-treatment"), TREATMENT);
     log(3, "Diagnóstico y Tratamiento llenados en la nota clínica");
     await takeSnapshot('Fase3-02-NotaClinicaLlenada');
 
-    await click(xp("//button[contains(., 'Guardar y Completar')]"));
+    await click(xp("//button[contains(., 'Guardar y completar')]"));
+    await click(xp("//button[contains(., 'Confirmar y completar')]"));
     log(4, "Clic en Guardar y Completar");
 
     // El diálogo se cierra al guardar y la fila pasa a Completada.

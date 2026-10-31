@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BrandLogo } from "@/components/brand-logo";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useCallback } from "react";
 import { cn } from "@workspace/ui/lib/utils";
@@ -9,6 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useSidebar } from "@/components/layout/sidebar-context";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useProfile } from "@/hooks/use-queries";
+import { ROLE_LABELS } from "@/lib/role-labels";
 import {
   Calendar,
   Users,
@@ -24,26 +26,25 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["ADMIN", "RECEPTIONIST", "DENTIST", "PATIENT"] },
+  { href: "/dashboard", label: "Panel de control", icon: LayoutDashboard, roles: ["ADMIN", "RECEPTIONIST", "DENTIST"] },
   { href: "/appointments", label: "Citas", icon: Calendar, roles: ["ADMIN", "RECEPTIONIST", "DENTIST", "PATIENT"] },
   { href: "/patients", label: "Pacientes", icon: Users, roles: ["ADMIN", "RECEPTIONIST", "DENTIST"] },
-  { href: "/dentists", label: "Odontólogos", icon: Stethoscope, roles: ["ADMIN", "RECEPTIONIST"] },
+  { href: "/dentists", label: "Catálogo", icon: Stethoscope, roles: ["ADMIN"] },
   { href: "/clinical-records", label: "Historial Clínico", icon: FileText, roles: ["ADMIN", "DENTIST", "PATIENT"] },
   { href: "/users", label: "Usuarios", icon: Shield, roles: ["ADMIN"] },
   { href: "/config", label: "Configuración", icon: Settings, roles: ["ADMIN"] },
   { href: "/profile", label: "Mi Perfil", icon: User, roles: ["ADMIN", "RECEPTIONIST", "DENTIST", "PATIENT"] },
 ];
 
-function SidebarNav({ onNavClick }: { onNavClick?: () => void }) {
+function SidebarNav({ onNavClick, isCollapsed = false }: { onNavClick?: () => void; isCollapsed?: boolean }) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const { isCollapsed } = useSidebar();
   const { data: profile } = useProfile();
   const filteredNav = navItems.filter((item) => user?.role && item.roles.includes(user.role));
 
   return (
     <>
-      <nav className="flex-1 space-y-1 overflow-y-auto p-2">
+      <nav aria-label="Navegación principal" className={cn("min-h-0 min-w-0 flex-1 space-y-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3", isCollapsed && "p-2")}>
         {filteredNav.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
@@ -53,22 +54,24 @@ function SidebarNav({ onNavClick }: { onNavClick?: () => void }) {
               href={item.href}
               onClick={onNavClick}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex min-w-0 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                 isCollapsed && "justify-center px-2",
                 isActive
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
               title={isCollapsed ? item.label : undefined}
+              aria-label={isCollapsed ? item.label : undefined}
+              aria-current={isActive ? "page" : undefined}
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {!isCollapsed && <span className="truncate">{item.label}</span>}
+              {!isCollapsed && <span className="min-w-0 flex-1 leading-5 whitespace-normal [overflow-wrap:anywhere]">{item.label}</span>}
             </Link>
           );
         })}
       </nav>
 
-      <div className={cn("border-t p-4", isCollapsed && "px-2")}>
+      <div className={cn("min-w-0 shrink-0 border-t p-4", isCollapsed && "flex flex-col items-center px-2")}>
         {user && (
           <div className={cn("mb-2 flex items-center gap-2", isCollapsed && "justify-center")}>
             <UserAvatar
@@ -82,7 +85,7 @@ function SidebarNav({ onNavClick }: { onNavClick?: () => void }) {
                 <p className="truncate font-medium">
                   {user.firstName} {user.lastName}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">{user.role}</p>
+                <p className="truncate text-xs text-muted-foreground">{ROLE_LABELS[user.role]}</p>
               </div>
             )}
           </div>
@@ -133,31 +136,22 @@ export function Sidebar() {
       {/* Desktop sidebar (tablet compact / laptop+ expanded) */}
       <aside
         className={cn(
-          // `h-screen sticky` en vez de `h-full`: el padre es `min-h-screen` sin
-          // altura explícita, así que `h-full` colapsaba la barra a media página.
-          // `shrink-0` evita que el contenido la comprima.
-          "hidden lg:flex sticky top-0 h-screen shrink-0 flex-col border-r bg-card transition-all duration-200 ease-in-out",
+          "sticky top-3 m-3 hidden h-[calc(100dvh-1.5rem)] min-w-0 shrink-0 self-start flex-col overflow-hidden rounded-xl border bg-card transition-[width] duration-200 ease-in-out lg:flex",
           sidebarWidth
         )}
       >
-        <div className={cn("flex h-14 items-center border-b", isCollapsed ? "justify-center px-2" : "px-4")}>
-          {isCollapsed ? (
-            <span className="font-semibold text-lg">B</span>
-          ) : (
-            <Link href="/" className="font-semibold text-lg">
-              BIODENTIS
-            </Link>
-          )}
+        <div className={cn("flex h-14 shrink-0 items-center border-b", isCollapsed ? "justify-center px-2" : "px-4")}>
+          <Link href="/" aria-label="Biodentis, inicio"><BrandLogo compact={isCollapsed} /></Link>
         </div>
 
-        <SidebarNav />
+        <SidebarNav isCollapsed={isCollapsed} />
 
-        <div className={cn("border-t p-2 flex justify-center", isCollapsed ? "py-3" : "px-4 py-2")}>
+        <div className={cn("flex shrink-0 justify-center border-t p-2", isCollapsed ? "py-3" : "px-4 py-2")}>
           <Button
             variant="ghost"
             size={isCollapsed ? "icon-xs" : "icon-sm"}
             onPress={toggleCollapsed}
-            aria-label={isCollapsed ? "Expandir sidebar" : "Colapsar sidebar"}
+            aria-label={isCollapsed ? "Expandir barra lateral" : "Contraer barra lateral"}
           >
             {isCollapsed ? (
               <PanelLeftOpen className="h-4 w-4" />
@@ -183,12 +177,12 @@ export function Sidebar() {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-80 max-w-[80vw] flex-col border-r bg-card transition-transform duration-200 ease-in-out lg:hidden",
-          isMobileOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-3 left-3 z-50 flex w-80 max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-xl border bg-card transition-transform duration-200 ease-in-out lg:hidden",
+          isMobileOpen ? "translate-x-0" : "-translate-x-[calc(100%+0.75rem)]"
         )}
       >
-        <div className="flex h-14 items-center justify-between border-b px-4">
-          <span className="font-semibold text-lg">BIODENTIS</span>
+        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b px-4">
+          <Link href="/" onClick={closeMobile} aria-label="Biodentis, inicio"><BrandLogo /></Link>
           <Button variant="ghost" size="icon-sm" onPress={closeMobile} aria-label="Cerrar menú">
             <PanelLeftClose className="h-4 w-4" />
           </Button>

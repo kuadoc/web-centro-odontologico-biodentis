@@ -1,4 +1,5 @@
 import { Geist_Mono, Inter } from "next/font/google"
+import type { Metadata } from "next"
 
 import "@workspace/ui/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -6,6 +7,10 @@ import { QueryProvider } from "@/components/query-provider"
 import { cn } from "@workspace/ui/lib/utils";
 
 const inter = Inter({subsets:['latin'],variable:'--font-sans'})
+
+export const metadata: Metadata = {
+  title: "BIODENTIS | Centro odontológico",
+};
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
@@ -19,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="es"
       suppressHydrationWarning
       className={cn("antialiased", fontMono.variable, "font-sans", inter.variable)}
     >

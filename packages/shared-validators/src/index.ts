@@ -8,6 +8,15 @@ export {
   SettingTypeSchema,
 } from "./enums";
 export {
+  StorageDriverSchema,
+  CatalogIdSchema,
+  SaveSpecialtySchema,
+  SaveCatalogServiceSchema,
+  CatalogStateSchema,
+  AssignSpecialtyDentistsSchema,
+  GuardarImagenCarpetaSchema,
+  ImagenStorageClaveSchema,
+  GuardarImagenArchivoSchema,
   RegisterSchema,
   LoginSchema,
   RequestAppointmentSchema,
@@ -36,6 +45,9 @@ export {
   UpdateProfileSchema,
   UpdatePasswordSchema,
   UpdateDentistProfileSchema,
+  AvatarSchema,
+  CreateUserSchema,
+  UpdateUserSchema,
 } from "./schemas";
 export {
   canCancelOrReschedule,

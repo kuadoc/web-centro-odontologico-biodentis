@@ -118,6 +118,7 @@ model Dentist {
   appointments       Appointment[]
   clinicalRecords    ClinicalRecord[]     @relation("DentistRecords")
   treatmentPlans     TreatmentPlan[]
+  specialties        Specialty[]
 
   @@map("dentists")
 }
@@ -197,7 +198,9 @@ model Treatment {
   name            String
   category        String
   durationMinutes Int      @default(30)
-  price           Decimal  @db.Decimal(10, 2)
+  price           Decimal? @db.Decimal(10, 2)
+  specialtyId     String?
+  specialty       Specialty? @relation(fields: [specialtyId], references: [id])
   description     String?
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
@@ -208,6 +211,17 @@ model Treatment {
 
   @@index([category])
   @@map("treatments")
+}
+
+model Specialty {
+  id          String @id @default(uuid())
+  name        String @unique
+  description String?
+  isActive    Boolean @default(true)
+  dentists    Dentist[]
+  treatments  Treatment[]
+
+  @@map("specialties")
 }
 
 /// Tratamiento multisesion en curso de un paciente. Alimenta el KPI "Tratamientos en Curso".

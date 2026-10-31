@@ -19,7 +19,7 @@ export async function GET(
       return Response.json(await availabilityService.getWeekly(id));
     }
 
-    const slots = await availabilityService.getAvailableSlots(id, date);
+    const slots = await availabilityService.getAvailableSlots(id, date, searchParams.get("treatmentId") ?? undefined);
     return Response.json(slots);
   } catch (error) {
     return handleApiError(error);

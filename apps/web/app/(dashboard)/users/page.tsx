@@ -5,6 +5,8 @@ import { Card, CardContent } from "@workspace/ui/components/card";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
+import { ProfilePhotoPicker } from "@/components/ui/profile-photo-picker";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import {
   Dialog,
   DialogHeader,
@@ -50,10 +52,14 @@ interface UserItem {
   firstName: string;
   lastName: string;
   phone?: string | null;
+  avatarUrl?: string | null;
+  isActive: boolean;
   createdAt: string;
   dentistProfile?: {
     id: string;
     specialty: string;
+    licenseNumber?: string | null;
+    university?: string | null;
   } | null;
 }
 
@@ -84,10 +90,6 @@ const roleBadgeStyles: Record<string, string> = {
   RECEPTIONIST: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
   PATIENT: "bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-400",
 };
-
-function getInitials(firstName: string, lastName: string) {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-}
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
@@ -123,6 +125,7 @@ export default function UsersPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
+  const [photoProcessing, setPhotoProcessing] = useState(false);
 
   const [createForm, setCreateForm] = useState({
     firstName: "",
@@ -131,12 +134,20 @@ export default function UsersPage() {
     phone: "",
     role: "DENTIST" as string,
     password: "BioDent#2024",
+    avatarUrl: null as string | null,
+    specialty: "General",
+    licenseNumber: "",
+    university: "",
   });
 
   const [editForm, setEditForm] = useState({
     firstName: "",
     lastName: "",
     email: "",
+    avatarUrl: null as string | null,
+    specialty: "General",
+    licenseNumber: "",
+    university: "",
   });
 
   const rowsPerPage = 10;
@@ -147,7 +158,7 @@ export default function UsersPage() {
       `${u.firstName} ${u.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase());
     const matchesRole = filterRole === "all" || u.role === filterRole;
-    const matchesStatus = filterStatus === "all" || true;
+    const matchesStatus = filterStatus === "all" || (filterStatus === "active" ? u.isActive : !u.isActive);
     return matchesSearch && matchesRole && matchesStatus;
   });
 
@@ -163,7 +174,7 @@ export default function UsersPage() {
 
   function openEditModal(user: UserItem) {
     setSelectedUser(user);
-    setEditForm({ firstName: user.firstName, lastName: user.lastName, email: user.email });
+    setEditForm({ firstName: user.firstName, lastName: user.lastName, email: user.email, avatarUrl: user.avatarUrl ?? null, specialty: user.dentistProfile?.specialty ?? "General", licenseNumber: user.dentistProfile?.licenseNumber ?? "", university: user.dentistProfile?.university ?? "" });
     setShowEditModal(true);
   }
 
@@ -176,7 +187,7 @@ export default function UsersPage() {
     try {
       await createMutation.mutateAsync(createForm);
       setShowCreateModal(false);
-      setCreateForm({ firstName: "", lastName: "", email: "", phone: "", role: "DENTIST", password: "BioDent#2024" });
+      setCreateForm({ firstName: "", lastName: "", email: "", phone: "", role: "DENTIST", password: "BioDent#2024", avatarUrl: null, specialty: "General", licenseNumber: "", university: "" });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Error al crear usuario");
     }
@@ -187,7 +198,7 @@ export default function UsersPage() {
     try {
       await updateMutation.mutateAsync({
         id: selectedUser.id,
-        data: { firstName: editForm.firstName, lastName: editForm.lastName },
+        data: { firstName: editForm.firstName, lastName: editForm.lastName, avatarUrl: editForm.avatarUrl, ...(selectedUser.role === "DENTIST" ? { specialty: editForm.specialty, licenseNumber: editForm.licenseNumber, university: editForm.university } : {}) },
       });
       setShowEditModal(false);
     } catch (err) {
@@ -349,9 +360,7 @@ export default function UsersPage() {
                     <tr key={u.id} className="hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
-                            {getInitials(u.firstName, u.lastName)}
-                          </div>
+                          <UserAvatar firstName={u.firstName} lastName={u.lastName} avatarUrl={u.avatarUrl} size="md" />
                           <div>
                             <p className="font-medium">
                               {u.firstName} {u.lastName}
@@ -426,9 +435,7 @@ export default function UsersPage() {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-semibold">
-                      {getInitials(u.firstName, u.lastName)}
-                    </div>
+                    <UserAvatar firstName={u.firstName} lastName={u.lastName} avatarUrl={u.avatarUrl} size="md" />
                     <div>
                       <p className="font-medium">{u.firstName} {u.lastName}</p>
                       <p className="text-xs text-muted-foreground">{u.email}</p>
@@ -483,7 +490,7 @@ export default function UsersPage() {
       </button>
 
       {/* Create User Modal */}
-      <Dialog isOpen={showCreateModal} onOpenChange={setShowCreateModal} className="sm:max-w-lg max-sm:inset-2 max-sm:w-auto">
+      <Dialog isOpen={showCreateModal} onOpenChange={setShowCreateModal} className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="h-5 w-5" />
@@ -495,6 +502,8 @@ export default function UsersPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            <ProfilePhotoPicker key={`create-${showCreateModal}`} firstName={createForm.firstName} lastName={createForm.lastName} avatarUrl={createForm.avatarUrl} portrait={createForm.role === "DENTIST"} isSaving={createMutation.isPending} onProcessingChange={setPhotoProcessing} onChange={(avatarUrl) => setCreateForm((form) => ({ ...form, avatarUrl }))} />
+            {createForm.role === "DENTIST" && <p className="text-xs text-muted-foreground">El nombre, la foto y los datos profesionales se mostrarán en el equipo de la página principal mientras la cuenta esté activa.</p>}
             <div className="rounded-lg bg-muted/50 p-3 flex items-start gap-2">
               <Info className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
               <p className="text-xs text-muted-foreground leading-relaxed">
@@ -553,6 +562,11 @@ export default function UsersPage() {
               />
             </div>
 
+            {createForm.role === "DENTIST" && <div className="space-y-3 rounded-xl border p-3">
+              <div className="space-y-1"><label htmlFor="create-specialty" className="text-sm font-medium">Especialidad</label><Input id="create-specialty" value={createForm.specialty} onChange={(e) => setCreateForm({ ...createForm, specialty: e.target.value })} /></div>
+              <div className="space-y-1"><label htmlFor="create-license" className="text-sm font-medium">Registro profesional</label><Input id="create-license" value={createForm.licenseNumber} onChange={(e) => setCreateForm({ ...createForm, licenseNumber: e.target.value })} /></div>
+              <div className="space-y-1"><label htmlFor="create-university" className="text-sm font-medium">Universidad</label><Input id="create-university" value={createForm.university} onChange={(e) => setCreateForm({ ...createForm, university: e.target.value })} /></div>
+            </div>}
             <div className="rounded-lg bg-muted/50 p-3 space-y-2">
               <label className="text-sm font-medium flex items-center gap-1.5">
                 <Lock className="h-3.5 w-3.5" />
@@ -574,7 +588,7 @@ export default function UsersPage() {
             <Button variant="outline" onPress={() => setShowCreateModal(false)}>
               Cancelar
             </Button>
-            <Button onPress={handleCreate} isDisabled={createMutation.isPending}>
+            <Button onPress={handleCreate} isDisabled={createMutation.isPending || photoProcessing}>
               <Save className="mr-1.5 h-4 w-4" />
               {createMutation.isPending ? "Creando..." : "Crear Usuario"}
             </Button>
@@ -582,11 +596,11 @@ export default function UsersPage() {
       </Dialog>
 
       {/* Edit User Modal */}
-      <Dialog isOpen={showEditModal} onOpenChange={setShowEditModal} className="sm:max-w-md max-sm:inset-2 max-sm:w-auto">
+      <Dialog isOpen={showEditModal} onOpenChange={setShowEditModal} className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="h-5 w-5" />
-              Editar Permisos de Usuario
+              Editar Usuario
             </DialogTitle>
             <DialogDescription>
               {selectedUser && `Modificación de credenciales para ${selectedUser.firstName} ${selectedUser.lastName}`}
@@ -594,6 +608,7 @@ export default function UsersPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            <ProfilePhotoPicker key={selectedUser?.id} firstName={editForm.firstName} lastName={editForm.lastName} avatarUrl={editForm.avatarUrl} portrait={selectedUser?.role === "DENTIST"} isSaving={updateMutation.isPending} onProcessingChange={setPhotoProcessing} onChange={(avatarUrl) => setEditForm((form) => ({ ...form, avatarUrl }))} />
             <div className="rounded-lg bg-muted/50 p-3">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium flex items-center gap-1.5">
@@ -636,13 +651,19 @@ export default function UsersPage() {
               <label className="text-sm font-medium">Correo Institucional</label>
               <Input value={editForm.email} disabled />
             </div>
+            {selectedUser?.role === "DENTIST" && <div className="space-y-3 rounded-xl border p-3">
+              <p className="text-xs text-muted-foreground">Estos datos se mostrarán en la página principal mientras el odontólogo esté activo.</p>
+              <div className="space-y-1"><label htmlFor="edit-specialty" className="text-sm font-medium">Especialidad</label><Input id="edit-specialty" value={editForm.specialty} onChange={(e) => setEditForm({ ...editForm, specialty: e.target.value })} /></div>
+              <div className="space-y-1"><label htmlFor="edit-license" className="text-sm font-medium">Registro profesional</label><Input id="edit-license" value={editForm.licenseNumber} onChange={(e) => setEditForm({ ...editForm, licenseNumber: e.target.value })} /></div>
+              <div className="space-y-1"><label htmlFor="edit-university" className="text-sm font-medium">Universidad</label><Input id="edit-university" value={editForm.university} onChange={(e) => setEditForm({ ...editForm, university: e.target.value })} /></div>
+            </div>}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onPress={() => setShowEditModal(false)}>
               Cancelar
             </Button>
-            <Button onPress={handleEdit} isDisabled={updateMutation.isPending}>
+            <Button onPress={handleEdit} isDisabled={updateMutation.isPending || photoProcessing}>
               <Save className="mr-1.5 h-4 w-4" />
               {updateMutation.isPending ? "Actualizando..." : "Actualizar Usuario"}
             </Button>
