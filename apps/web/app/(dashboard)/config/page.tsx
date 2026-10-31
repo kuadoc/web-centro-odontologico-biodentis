@@ -80,14 +80,14 @@ export default function ConfigPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-start gap-3 p-3 rounded-lg text-left transition-all ${
                   activeTab === tab.id
-                    ? "bg-primary text-white shadow-xs"
+                    ? "bg-primary text-primary-foreground shadow-xs"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
                 <tab.icon className="h-5 w-5 mt-0.5 shrink-0" />
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-semibold leading-tight truncate">{tab.label}</span>
-                  <span className={`text-xs mt-0.5 truncate ${activeTab === tab.id ? "text-white/80" : "text-muted-foreground"}`}>
+                  <span className={`text-xs mt-0.5 truncate ${activeTab === tab.id ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
                     {tab.desc}
                   </span>
                 </div>

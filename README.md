@@ -94,14 +94,20 @@ pnpm --filter @biodentis/backend db:push
 ### 6. Cargar datos de prueba (seed)
 
 ```bash
-pnpm --filter @biodentis/backend db:seed
+pnpm --filter web db:seed
 ```
 
-Esto crea:
-- Admin: `admin@biodentis.com` / `password123`
-- Recepcionista: `recepcion@biodentis.com` / `password123`
-- Odontologo: `dr.martinez@biodentis.com` / `password123`
-- Paciente: `paciente@biodentis.com` / `password123`
+Configura primero `SEED_DEMO_PASSWORD` (mínimo 12 caracteres) en `apps/web/.env`,
+que está excluido de Git. El seed es solo para una base de desarrollo y rechaza
+`NODE_ENV=production`. No ejecutes este seed contra una base con usuarios reales.
+No cambia las contraseñas de cuentas que ya existen.
+
+Esto crea cuentas de demostración con la contraseña definida localmente:
+
+- Admin: `admin@biodentis.com`
+- Recepcionista: `recepcion@biodentis.com`
+- Odontologo: `dr.martinez@biodentis.com`
+- Paciente: `paciente@biodentis.com`
 - Horarios de disponibilidad (Lunes a Viernes 8:00-12:00, 14:00-18:00)
 
 ## Ejecutar en Desarrollo
@@ -145,7 +151,7 @@ Abre la interfaz de Prisma Studio en `http://localhost:5555`
 POST http://localhost:3001/api/v1/auth/register
 {
   "email": "nuevo@paciente.com",
-  "password": "password123",
+  "password": "<contraseña de tu cuenta de prueba>",
   "firstName": "Juan",
   "lastName": "Perez",
   "role": "PATIENT"
@@ -155,7 +161,7 @@ POST http://localhost:3001/api/v1/auth/register
 POST http://localhost:3001/api/v1/auth/login
 {
   "email": "admin@biodentis.com",
-  "password": "password123"
+  "password": "<contraseña de tu cuenta de prueba>"
 }
 
 # Refresh Token (usa cookie httpOnly)

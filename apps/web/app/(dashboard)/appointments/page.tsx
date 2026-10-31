@@ -1,6 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { BookingSpecialty } from "@biodentis/shared-types";
+import { api } from "@/lib/api-client";
 import { Card, CardContent } from "@workspace/ui/components/card";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
@@ -84,8 +87,10 @@ export default function AppointmentsPage() {
   const completeMutation = useCompleteAppointment();
 
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ patientId: "", dentistId: "", date: "", startTime: "", endTime: "", notes: "" });
-  const { data: slots, isLoading: slotsLoading } = useAvailableSlots(form.dentistId, form.date);
+  const [form, setForm] = useState({ patientId: "", specialtyId: "", treatmentId: "", dentistId: "", date: "", startTime: "", endTime: "", notes: "" });
+  const booking = useQuery({ queryKey: ["booking-catalog"], queryFn: () => api.get<BookingSpecialty[]>("/api/catalog/booking"), enabled: showForm });
+  const specialty = booking.data?.find((s) => s.id === form.specialtyId);
+  const { data: slots, isLoading: slotsLoading } = useAvailableSlots(form.dentistId, form.date, form.treatmentId || undefined);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -100,12 +105,13 @@ export default function AppointmentsPage() {
         date: form.date,
         startTime: form.startTime,
         endTime: form.endTime,
+        treatmentId: form.treatmentId,
       };
       if (form.notes) payload.notes = form.notes;
       if (form.patientId) payload.patientId = form.patientId;
       await createMutation.mutateAsync(payload);
       setShowForm(false);
-      setForm({ patientId: "", dentistId: "", date: "", startTime: "", endTime: "", notes: "" });
+      setForm({ patientId: "", specialtyId: "", treatmentId: "", dentistId: "", date: "", startTime: "", endTime: "", notes: "" });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Error al crear cita");
     }
@@ -173,6 +179,22 @@ export default function AppointmentsPage() {
                 </div>
               )}
               <div className="space-y-2">
+                <label htmlFor="appointment-specialty" className="text-sm font-medium">Especialidad *</label>
+                <select id="appointment-specialty" className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm" required value={form.specialtyId} onChange={(e) => setForm({ ...form, specialtyId: e.target.value, treatmentId: "", dentistId: "", startTime: "", endTime: "" })}>
+                  <option value="">{booking.isPending ? "Cargando especialidades..." : "Seleccionar especialidad..."}</option>
+                  {booking.data?.filter((s) => s.services.length > 0).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                {booking.isError && <p role="alert" className="text-sm text-destructive">No se pudo cargar el catálogo. <button type="button" className="underline" onClick={() => void booking.refetch()}>Reintentar</button></p>}
+                {booking.isSuccess && !booking.data.some((s) => s.services.length > 0) && <p className="text-xs text-muted-foreground">No hay servicios disponibles para reservar. Comunícate con recepción.</p>}
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="appointment-service" className="text-sm font-medium">Servicio *</label>
+                <select id="appointment-service" className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm" required disabled={!specialty} value={form.treatmentId} onChange={(e) => setForm({ ...form, treatmentId: e.target.value, startTime: "", endTime: "" })}>
+                  <option value="">Seleccionar servicio...</option>
+                  {specialty?.services.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.durationMinutes} min{s.price === null ? "" : ` · S/ ${s.price.toFixed(2)}`}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
                 <label className="text-sm font-medium">Odontólogo</label>
                 <select
                   className="flex h-8 w-full items-center justify-between rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none"
@@ -181,7 +203,7 @@ export default function AppointmentsPage() {
                   required
                 >
                   <option value="">Seleccionar...</option>
-                  {dentists.map((d) => (
+                  {dentists.filter((d) => specialty?.dentists.some((assigned) => assigned.id === d.id)).map((d) => (
                     <option key={d.id} value={d.id}>
                       Dr. {d.user.firstName} {d.user.lastName} - {d.specialty}
                     </option>
@@ -238,7 +260,7 @@ export default function AppointmentsPage() {
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 />
               </div>
-              <Button type="submit" className="w-full" isDisabled={createMutation.isPending}>
+              <Button type="submit" className="w-full" isDisabled={createMutation.isPending || !form.treatmentId || !form.startTime}>
                 {createMutation.isPending ? "Creando..." : "Crear Cita"}
               </Button>
             </form>
@@ -327,7 +349,7 @@ export default function AppointmentsPage() {
                         </>
                       )}
                       {canManage && apt.status === "CONFIRMED" && (
-                        <Button size="sm" variant="outline" onPress={() => handleAction(apt.id, "complete")}>
+                          <Button size="sm" variant="outline" onPress={() => user?.role === "DENTIST" || user?.role === "RECEPTIONIST" ? setDetailId(apt.id) : handleAction(apt.id, "complete")}>
                           Completar
                         </Button>
                       )}
@@ -404,7 +426,7 @@ export default function AppointmentsPage() {
                       </>
                     )}
                     {apt.status === "CONFIRMED" && (
-                      <Button size="sm" variant="outline" className="flex-1" onPress={() => handleAction(apt.id, "complete")}>
+                      <Button size="sm" variant="outline" className="flex-1" onPress={() => user?.role === "DENTIST" || user?.role === "RECEPTIONIST" ? setDetailId(apt.id) : handleAction(apt.id, "complete")}>
                         Completar
                       </Button>
                     )}

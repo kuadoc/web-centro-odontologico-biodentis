@@ -28,7 +28,7 @@ export async function DELETE(
   try {
     await requireRole(request, [Role.ADMIN]);
     const { id } = await params;
-    await userService.update(id, { role: Role.PATIENT });
+    await userService.update(id, { isActive: false });
     return Response.json({ success: true });
   } catch (error) {
     return handleApiError(error);

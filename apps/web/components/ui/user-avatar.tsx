@@ -39,8 +39,8 @@ export function UserAvatar({
   size = "sm",
   className,
 }: UserAvatarProps) {
-  const [failed, setFailed] = useState(false);
-  const showImage = Boolean(avatarUrl) && !failed;
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const showImage = Boolean(avatarUrl) && failedUrl !== avatarUrl;
 
   return (
     <div
@@ -56,7 +56,7 @@ export function UserAvatar({
           src={avatarUrl as string}
           alt={`Foto de ${firstName ?? ""} ${lastName ?? ""}`.trim()}
           className="h-full w-full object-cover"
-          onError={() => setFailed(true)}
+          onError={() => setFailedUrl(avatarUrl ?? null)}
         />
       ) : (
         <span>{initialsOf(firstName, lastName)}</span>

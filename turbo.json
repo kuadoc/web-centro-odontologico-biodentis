@@ -1,6 +1,24 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalEnv": [
+    "NODE_ENV",
+    "DATABASE_URL",
+    "JWT_ACCESS_SECRET",
+    "JWT_REFRESH_SECRET",
+    "RESEND_API_KEY",
+    "EMAIL_FROM",
+    "FRONTEND_URL",
+    "CRON_SECRET",
+    "STORAGE_DRIVER"
+  ],
+  "globalPassThroughEnv": [
+    "SEED_DEMO_PASSWORD",
+    "E2E_*",
+    "HEADLESS",
+    "CHROME_BINARY",
+    "SELENIUM_CHROMEDRIVER"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

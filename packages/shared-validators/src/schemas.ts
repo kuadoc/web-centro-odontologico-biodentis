@@ -1,6 +1,20 @@
 import { z } from "zod";
 import { RoleSchema, AppointmentStatusSchema, DentalUnitTypeSchema, DentalUnitStatusSchema, ExceptionScopeSchema, ExceptionStatusSchema, SettingTypeSchema } from "./enums";
 
+const storageUuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+export const StorageDriverSchema = z.enum(["local", "s3"]);
+export const GuardarImagenCarpetaSchema = z.string().regex(
+  new RegExp(`^(?:odontologos|avatares/${storageUuid})$`),
+  "La carpeta debe ser odontologos o avatares/<UUID del propietario>",
+);
+export const ImagenStorageClaveSchema = z.string().max(160).regex(
+  new RegExp(`^(?:odontologos|avatares/${storageUuid})/${storageUuid}(?:-thumb)?\\.webp$`),
+  "La clave de la imagen no es válida",
+);
+export const GuardarImagenArchivoSchema = z.instanceof(File, { error: "Adjunta un archivo de imagen válido" })
+  .refine((file) => file.size > 0, "La imagen está vacía")
+  .refine((file) => file.size <= 5 * 1024 * 1024, "La imagen supera el máximo de 5 MB");
+
 export const RegisterSchema = z.object({
   email: z.string().email("Email inválido"),
   password: z.string().min(8, "Mínimo 8 caracteres"),
@@ -16,12 +30,33 @@ export const LoginSchema = z.object({
 });
 
 export const RequestAppointmentSchema = z.object({
+  treatmentId: z.string().uuid().optional(),
   dentistId: z.string().uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
   notes: z.string().optional(),
   patientId: z.string().uuid().optional(),
+});
+
+export const CatalogIdSchema = z.string().uuid("Identificador no válido");
+export const SaveSpecialtySchema = z.object({
+  name: z.string().trim().min(1, "Escribe un nombre.").max(120, "Máximo 120 caracteres."),
+  description: z.string().trim().max(1000, "Máximo 1000 caracteres.").default(""),
+});
+export const SaveCatalogServiceSchema = z.object({
+  name: z.string().trim().min(1, "Escribe un nombre.").max(200, "Máximo 200 caracteres."),
+  durationMinutes: z.number().int().min(15, "Indica una duración de al menos 15 minutos.").max(720, "Máximo 720 minutos.")
+    .multipleOf(15, "Debe ser múltiplo de 15."),
+  price: z.number().min(0, "Precio no válido.").max(99999999.99, "Precio no válido.")
+    .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 0.00001, "Usa hasta dos decimales.").nullable(),
+});
+export const CatalogStateSchema = z.object({
+  isActive: z.boolean(),
+  confirm: z.boolean().default(false),
+});
+export const AssignSpecialtyDentistsSchema = z.object({
+  dentistIds: z.array(z.string().uuid()).max(1000).refine((ids) => new Set(ids).size === ids.length, "Hay odontólogos repetidos."),
 });
 
 export const RescheduleAppointmentSchema = z.object({
@@ -45,6 +80,7 @@ export const CreateClinicalRecordSchema = z.object({
 export const CompleteAppointmentSchema = z.object({
   diagnosis: z.string().trim().min(1, "El diagnóstico es requerido").max(2000),
   treatment: z.string().trim().min(1, "El tratamiento es requerido").max(2000),
+  nextControl: z.enum(["none", "1m", "3m", "6m"]).optional(),
 });
 
 export const ConfigureAvailabilitySchema = z.object({
@@ -208,11 +244,11 @@ const phoneField = z
  */
 const AVATAR_MAX_CHARS = 512 * 1024;
 
-const avatarField = z
+export const AvatarSchema = z
   .string()
   .max(AVATAR_MAX_CHARS, "La imagen es demasiado grande")
   .refine(
-    (value) => /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value) || /^https?:\/\//.test(value),
+    (value) => /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value) || /^https?:\/\//.test(value) || /^\/images\/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|webp)$/.test(value),
     "Formato de imagen no válido"
   );
 
@@ -223,7 +259,7 @@ export const UpdateProfileSchema = z
     phone: phoneField.or(z.literal("")).nullable().optional(),
     secondaryPhone: phoneField.or(z.literal("")).nullable().optional(),
     address: z.string().trim().max(200).or(z.literal("")).nullable().optional(),
-    avatarUrl: avatarField.or(z.literal("")).nullable().optional(),
+    avatarUrl: AvatarSchema.or(z.literal("")).nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "No hay campos para actualizar",
@@ -251,3 +287,27 @@ export const UpdateDentistProfileSchema = z.object({
   shiftLabel: z.string().trim().max(60).or(z.literal("")).nullable().optional(),
   assignedUnitId: z.string().uuid("Unidad inválida").nullable().optional(),
 });
+
+const professionalFields = {
+  specialty: z.string().trim().min(1, "Especialidad requerida").max(120).optional(),
+  licenseNumber: z.string().trim().max(50).nullable().optional(),
+  university: z.string().trim().max(120).nullable().optional(),
+};
+
+export const CreateUserSchema = RegisterSchema.extend({
+  role: RoleSchema,
+  address: z.string().trim().max(200).optional(),
+  avatarUrl: AvatarSchema.nullable().optional(),
+  ...professionalFields,
+});
+
+export const UpdateUserSchema = z.object({
+  firstName: z.string().trim().min(1, "Nombre requerido").optional(),
+  lastName: z.string().trim().min(1, "Apellido requerido").optional(),
+  phone: z.string().max(40).nullable().optional(),
+  address: z.string().trim().max(200).nullable().optional(),
+  avatarUrl: AvatarSchema.nullable().optional(),
+  role: RoleSchema.optional(),
+  isActive: z.boolean().optional(),
+  ...professionalFields,
+}).refine((data) => Object.keys(data).length > 0, { message: "No hay campos para actualizar" });

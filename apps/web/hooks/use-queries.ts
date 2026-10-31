@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import type { z } from "zod";
+import type { CompleteAppointmentSchema } from "@biodentis/shared-validators";
 import type { Appointment, Dentist, User, DentalUnit, EmailTemplate, SystemSetting, Clinic, MyProfile, SessionInfo, DashboardOverview, DashboardAgenda, AgendaRow, WaitingRoomRow, PatientList, PatientStats, PatientDetail } from "@biodentis/shared-types";
 
 // ─── Query Keys ────────────────────────────────────────────────
@@ -98,10 +100,10 @@ export interface AvailableSlot {
 }
 
 /** Bloques libres de un odontologo en una fecha (YYYY-MM-DD). */
-export function useAvailableSlots(dentistId: string, date: string) {
+export function useAvailableSlots(dentistId: string, date: string, treatmentId?: string) {
   return useQuery({
-    queryKey: ["dentists", dentistId, "slots", date] as const,
-    queryFn: () => api.get<AvailableSlot[]>(`/api/dentists/${dentistId}/availability?date=${date}`),
+    queryKey: ["dentists", dentistId, "slots", date, treatmentId] as const,
+    queryFn: () => api.get<AvailableSlot[]>(`/api/dentists/${dentistId}/availability?date=${date}${treatmentId ? `&treatmentId=${treatmentId}` : ""}`),
     enabled: !!dentistId && !!date,
   });
 }
@@ -152,10 +154,12 @@ export function useCompleteAppointment() {
 export function useCompleteWithNote() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, diagnosis, treatment }: { id: string; diagnosis: string; treatment: string }) =>
-      api.patch(`/api/appointments/${id}/complete`, { diagnosis, treatment }),
+    mutationFn: ({ id, ...data }: z.infer<typeof CompleteAppointmentSchema> & { id: string }) =>
+      api.patch(`/api/appointments/${id}/complete`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.appointments });
+      qc.invalidateQueries({ queryKey: ["clinical-records"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }
@@ -228,6 +232,8 @@ export function useUpdateProfile() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.profile });
       qc.invalidateQueries({ queryKey: queryKeys.myProfile });
+      qc.invalidateQueries({ queryKey: ["public-dentists"] });
+      qc.invalidateQueries({ queryKey: queryKeys.users });
     },
   });
 }
@@ -270,6 +276,8 @@ export function useUpdateDentistProfile() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dentists });
       qc.invalidateQueries({ queryKey: queryKeys.myProfile });
+      qc.invalidateQueries({ queryKey: ["public-dentists"] });
+      qc.invalidateQueries({ queryKey: queryKeys.users });
     },
   });
 }
@@ -289,6 +297,8 @@ export function useCreateUser() {
     mutationFn: (data: unknown) => api.post("/api/users", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users });
+      qc.invalidateQueries({ queryKey: ["public-dentists"] });
+      qc.invalidateQueries({ queryKey: queryKeys.dentists });
     },
   });
 }
@@ -300,6 +310,9 @@ export function useUpdateUser() {
       api.patch(`/api/users/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users });
+      qc.invalidateQueries({ queryKey: ["public-dentists"] });
+      qc.invalidateQueries({ queryKey: queryKeys.dentists });
+      qc.invalidateQueries({ queryKey: queryKeys.profile });
     },
   });
 }
@@ -310,6 +323,8 @@ export function useDeleteUser() {
     mutationFn: (id: string) => api.del(`/api/users/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users });
+      qc.invalidateQueries({ queryKey: ["public-dentists"] });
+      qc.invalidateQueries({ queryKey: queryKeys.dentists });
     },
   });
 }

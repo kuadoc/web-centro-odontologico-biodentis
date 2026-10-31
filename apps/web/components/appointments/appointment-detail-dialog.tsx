@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { Appointment } from "@biodentis/shared-types";
 import { Badge } from "@workspace/ui/components/badge";
-import { Button } from "@workspace/ui/components/button";
-import { Textarea } from "@workspace/ui/components/textarea";
 import { useAuth } from "@/hooks/use-auth";
-import { useCompleteWithNote } from "@/hooks/use-queries";
+import { ClinicalNoteForm } from "@/components/appointments/clinical-note-form";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import {
   Dialog,
   DialogHeader,
@@ -55,48 +54,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-/** HU-05: formulario de nota clínica; guarda diagnóstico + tratamiento y completa la cita. */
-function ClinicalNoteForm({ appointmentId, onDone }: { appointmentId: string; onDone: () => void }) {
-  const [diagnosis, setDiagnosis] = useState("");
-  const [treatment, setTreatment] = useState("");
-  const [error, setError] = useState("");
-  const mutation = useCompleteWithNote();
-
-  async function handleSubmit() {
-    if (!diagnosis.trim() || !treatment.trim()) {
-      setError("Diagnóstico y tratamiento son obligatorios");
-      return;
-    }
-    setError("");
-    try {
-      await mutation.mutateAsync({ id: appointmentId, diagnosis, treatment });
-      onDone();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al guardar la nota clínica");
-    }
-  }
-
-  return (
-    <section className="space-y-3" aria-label="Registro de Nota Clínica">
-      <h3 className="text-xs font-semibold uppercase text-muted-foreground">Registro de Nota Clínica</h3>
-      <div className="space-y-3 rounded-xl bg-muted/60 p-4 ring-1 ring-foreground/10">
-        <div className="space-y-1">
-          <label htmlFor="clinical-diagnosis" className="text-sm font-medium">Diagnóstico</label>
-          <Textarea id="clinical-diagnosis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="clinical-treatment" className="text-sm font-medium">Tratamiento</label>
-          <Textarea id="clinical-treatment" value={treatment} onChange={(e) => setTreatment(e.target.value)} />
-        </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button className="w-full" onPress={handleSubmit} isDisabled={mutation.isPending}>
-          {mutation.isPending ? "Guardando..." : "Guardar y Completar"}
-        </Button>
-      </div>
-    </section>
-  );
-}
-
 export function AppointmentDetailDialog({ appointment, appointments, onClose }: AppointmentDetailDialogProps) {
   const { user } = useAuth();
   const history = useMemo(() => {
@@ -119,12 +76,12 @@ export function AppointmentDetailDialog({ appointment, appointments, onClose }: 
         if (!open) onClose();
       }}
       isDismissable
-      className="max-w-xl"
+      className="max-h-[calc(100dvh-2rem)] gap-0 overflow-clip p-0 sm:max-w-2xl [&>[data-slot=dialog]]:flex [&>[data-slot=dialog]]:max-h-[calc(100dvh-2rem)] [&>[data-slot=dialog]]:min-h-0 [&>[data-slot=dialog]]:flex-col"
     >
       {appointment && (
         <>
-          <DialogHeader>
-            <div className="flex items-center gap-2">
+          <DialogHeader className="shrink-0 border-b bg-muted/50 p-4 pr-12 sm:p-6 sm:pr-12">
+            <div className="flex flex-wrap items-center gap-2">
               <DialogTitle>Detalle de la cita</DialogTitle>
               <Badge className={STATUS_COLORS[appointment.status] || ""}>
                 {STATUS_LABELS[appointment.status] ?? appointment.status}
@@ -135,11 +92,12 @@ export function AppointmentDetailDialog({ appointment, appointments, onClose }: 
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex max-h-[65vh] flex-col gap-5 overflow-y-auto pr-1">
+          <div className="flex min-h-0 max-h-[65dvh] flex-col gap-6 overflow-y-auto p-4 sm:p-6">
             <section className="space-y-2">
               <h3 className="text-xs font-semibold uppercase text-muted-foreground">Datos del paciente</h3>
               <div className="rounded-xl bg-muted/60 p-4 ring-1 ring-foreground/10">
-                <p className="text-lg font-bold">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-3"><UserAvatar firstName={appointment.patient?.firstName} lastName={appointment.patient?.lastName} /><Badge variant="outline">{history.length} {history.length === 1 ? "cita en el historial" : "citas en el historial"}</Badge></div>
+                <p className="text-lg font-semibold">
                   {appointment.patient?.firstName} {appointment.patient?.lastName}
                 </p>
                 <p className="text-xs font-medium text-primary">Historial: {historyCode(appointment.patientId)}</p>
@@ -163,7 +121,7 @@ export function AppointmentDetailDialog({ appointment, appointments, onClose }: 
             <section className="space-y-2">
               <h3 className="text-xs font-semibold uppercase text-muted-foreground">Cita y agenda</h3>
               <div className="space-y-4 rounded-xl bg-muted/60 p-4 ring-1 ring-foreground/10">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Odontólogo a cargo">
                     Dr. {appointment.dentist?.user.firstName} {appointment.dentist?.user.lastName}
                     {appointment.dentist?.specialty ? ` (${appointment.dentist.specialty})` : ""}
@@ -174,14 +132,17 @@ export function AppointmentDetailDialog({ appointment, appointments, onClose }: 
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Motivo de la consulta</p>
+                  {appointment.treatment && <p className="mb-2 text-sm font-medium">{appointment.treatment.specialty?.name ?? appointment.treatment.category} · {appointment.treatment.name}</p>}
                   <p className="rounded-lg bg-card p-3 text-sm">{appointment.notes || MOTIVE_FALLBACK}</p>
                 </div>
               </div>
             </section>
 
-            {user?.role === "DENTIST" && appointment.status === "CONFIRMED" && (
-              <ClinicalNoteForm appointmentId={appointment.id} onDone={onClose} />
+            {(user?.role === "DENTIST" || user?.role === "RECEPTIONIST") && appointment.status === "CONFIRMED" && !appointment.clinicalRecord && (
+              <ClinicalNoteForm key={appointment.id} appointmentId={appointment.id} onDone={onClose} />
             )}
+
+            {appointment.clinicalRecord && <section className="space-y-2" aria-label="Nota clínica registrada"><h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Nota clínica registrada</h3><p className="whitespace-pre-wrap break-words rounded-lg border p-4 text-sm leading-relaxed">{appointment.clinicalRecord.notes}</p></section>}
 
             <section className="space-y-2">
               <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
@@ -199,7 +160,7 @@ export function AppointmentDetailDialog({ appointment, appointments, onClose }: 
                 {history.map((a) => (
                   <li
                     key={a.id}
-                    className={`flex items-start justify-between gap-3 p-3 text-sm ${
+                    className={`flex flex-wrap items-start justify-between gap-3 p-3 text-sm ${
                       a.id === appointment.id ? "bg-primary/5" : ""
                     }`}
                   >
@@ -233,7 +194,7 @@ export function AppointmentDetailDialog({ appointment, appointments, onClose }: 
             </section>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="m-0 shrink-0 flex-row px-4 sm:px-6">
             <DialogClose>Cerrar</DialogClose>
           </DialogFooter>
         </>

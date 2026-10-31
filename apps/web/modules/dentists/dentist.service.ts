@@ -4,6 +4,10 @@ import { NotFoundError } from "@/lib/errors";
 const dentistRepository = new DentistRepository();
 
 export class DentistService {
+  async getPublicProfiles() {
+    return dentistRepository.findPublicProfiles();
+  }
+
   async getAll() {
     return dentistRepository.findAll();
   }

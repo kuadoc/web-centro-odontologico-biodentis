@@ -11,6 +11,8 @@ import {
   DENTIST_VISIBLE_STATUSES,
 } from "@biodentis/shared-validators";
 import { AppointmentStatus, Role } from "@biodentis/shared-types";
+import { AuditService } from "@/modules/audit/audit.service";
+import { CatalogAdminService } from "@/modules/service-catalog/catalog-admin.service";
 import { ValidationError, DomainError, ScheduleConflictError, NotFoundError, AuthorizationError } from "@/lib/errors";
 
 const appointmentRepository = new AppointmentRepository();
@@ -54,9 +56,11 @@ export class AppointmentService {
    */
   async create(data: unknown, patientId: string, actorRole?: Role) {
     const parsed = RequestAppointmentSchema.parse(data);
+    if (actorRole === Role.PATIENT && !parsed.treatmentId) throw new ValidationError("Selecciona el servicio que deseas reservar.");
+    if (parsed.treatmentId) await new CatalogAdminService().requireBookable(parsed.treatmentId, parsed.dentistId);
 
-    if (actorRole === Role.PATIENT) {
-      const slots = await availabilityService.getAvailableSlots(parsed.dentistId, parsed.date);
+    if (actorRole === Role.PATIENT || parsed.treatmentId) {
+      const slots = await availabilityService.getAvailableSlots(parsed.dentistId, parsed.date, parsed.treatmentId);
       const slot = slots.find((s) => s.startTime === parsed.startTime);
       if (!slot) {
         throw new ScheduleConflictError("El horario seleccionado ya no esta disponible");
@@ -72,6 +76,8 @@ export class AppointmentService {
       parsed.dentistId,
       new Date(parsed.date),
       parsed.startTime,
+      undefined,
+      parsed.endTime,
     );
     if (conflict) {
       throw new ScheduleConflictError("El odontólogo ya tiene una cita en ese horario");
@@ -84,6 +90,7 @@ export class AppointmentService {
       startTime: parsed.startTime,
       endTime: parsed.endTime,
       notes: parsed.notes,
+      treatmentId: parsed.treatmentId,
       // HU-03: toda cita nueva nace PENDING hasta que Recepcion la confirme.
       status: AppointmentStatus.PENDING,
     });
@@ -134,6 +141,7 @@ export class AppointmentService {
       new Date(parsed.date),
       parsed.startTime,
       id,
+      parsed.endTime,
     );
     if (conflict) {
       throw new ScheduleConflictError("El odontólogo ya tiene una cita en ese horario");
@@ -171,11 +179,14 @@ export class AppointmentService {
     return appointmentRepository.updateStatus(id, parsed.status as AppointmentStatus);
   }
 
-  /** HU-05: el odontólogo registra la nota clínica (diagnóstico + tratamiento) y completa su cita CONFIRMED. */
-  async completeWithClinicalNote(id: string, data: unknown, actor: { dentistId?: string }) {
+  /** Recepción o el odontólogo a cargo registran la nota y completan una cita confirmada. */
+  async completeWithClinicalNote(id: string, data: unknown, actor: { role: Role; userId: string; dentistId?: string }) {
     const appointment = await appointmentRepository.findById(id);
     if (!appointment) throw new NotFoundError("Cita no encontrada");
-    if (!actor.dentistId || appointment.dentistId !== actor.dentistId) {
+    if (actor.role !== Role.RECEPTIONIST && actor.role !== Role.DENTIST) {
+      throw new AuthorizationError("No tienes permiso para registrar notas clínicas");
+    }
+    if (actor.role === Role.DENTIST && (!actor.dentistId || appointment.dentistId !== actor.dentistId)) {
       throw new AuthorizationError("Esta cita no pertenece a tu agenda");
     }
     if (appointment.status !== AppointmentStatus.CONFIRMED) {
@@ -183,8 +194,11 @@ export class AppointmentService {
     }
     if (appointment.clinicalRecord) throw new DomainError("La cita ya tiene una nota clínica");
 
-    const { diagnosis, treatment } = CompleteAppointmentSchema.parse(data);
-    const notes = `Diagnóstico: ${diagnosis}\nTratamiento: ${treatment}`;
-    return appointmentRepository.completeWithRecord(id, appointment.patientId, appointment.dentistId, notes);
+    const { diagnosis, treatment, nextControl } = CompleteAppointmentSchema.parse(data);
+    const controls = { none: "Sin control indicado", "1m": "En 1 mes", "3m": "En 3 meses", "6m": "En 6 meses" };
+    const notes = `Diagnóstico: ${diagnosis}\nTratamiento: ${treatment}${nextControl ? `\nPróximo control: ${controls[nextControl]}` : ""}`;
+    const completed = await appointmentRepository.completeWithRecord(id, appointment.patientId, appointment.dentistId, notes);
+    await new AuditService().log(actor.userId, "CREATE_CLINICAL_RECORD", "Appointment", id, `Registro clínico y cita completada por ${actor.role}`);
+    return completed;
   }
 }

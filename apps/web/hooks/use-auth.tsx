@@ -18,7 +18,7 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -63,10 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.error || "Error al iniciar sesión");
     }
 
-    const data = await res.json();
+    const data: { user: User; accessToken: string } = await res.json();
     localStorage.setItem("accessToken", data.accessToken);
     localStorage.setItem("user", JSON.stringify(data.user));
     setState({ user: data.user, token: data.accessToken, isLoading: false });
+    return data.user;
   }, []);
 
   const register = useCallback(async (data: RegisterData) => {

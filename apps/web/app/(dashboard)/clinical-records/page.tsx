@@ -4,28 +4,30 @@ import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Pagination } from "@workspace/ui/components/pagination";
 import { usePagination } from "@workspace/ui/hooks/use-pagination";
-import { useAuth } from "@/hooks/use-auth";
 import { useAppointments } from "@/hooks/use-queries";
 import { FileText, Calendar } from "lucide-react";
-
-interface ClinicalRecord {
-  id: string;
-  notes: string;
-  createdAt: string;
-  patient: { id: string; firstName: string; lastName: string };
-  dentist: { user: { firstName: string; lastName: string } };
-  appointment: { date: string; startTime: string; endTime: string };
-}
+import { useAuth } from "@/hooks/use-auth";
+import { PatientClinicalHistory } from "@/components/clinical-records/patient-clinical-history";
 
 export default function ClinicalRecordsPage() {
   const { user } = useAuth();
+
+  return user?.role === "PATIENT" ? <PatientClinicalHistory /> : <StaffClinicalRecords />;
+}
+
+function StaffClinicalRecords() {
   const { data: appointmentsData, isLoading } = useAppointments();
 
   const records = useMemo(() => {
     const appts = Array.isArray(appointmentsData) ? appointmentsData : [];
     return appts
-      .filter((a) => (a as unknown as Record<string, unknown>).clinicalRecord)
-      .map((a) => (a as unknown as { clinicalRecord: ClinicalRecord }).clinicalRecord);
+      .flatMap((appointment) => appointment.clinicalRecord ? [{
+        id: appointment.id,
+        notes: appointment.clinicalRecord.notes,
+        patient: appointment.patient,
+        dentist: appointment.dentist,
+        appointment,
+      }] : []);
   }, [appointmentsData]);
 
   const pagination = usePagination(records, 10);
@@ -58,7 +60,7 @@ export default function ClinicalRecordsPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">
-                    {record.patient.firstName} {record.patient.lastName}
+                    {record.patient ? `${record.patient.firstName} ${record.patient.lastName}` : "Paciente no disponible"}
                   </CardTitle>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Calendar className="h-4 w-4" />
@@ -70,9 +72,10 @@ export default function ClinicalRecordsPage() {
                 <div className="flex items-start gap-3">
                   <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
                   <div>
+                    {record.appointment.treatment && <p className="mb-2 text-sm font-medium">{record.appointment.treatment.specialty?.name ?? record.appointment.treatment.category} · {record.appointment.treatment.name}</p>}
                     <p className="text-sm">{record.notes}</p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Dr. {record.dentist.user.firstName} {record.dentist.user.lastName}
+                      {record.dentist?.user ? `Dr. ${record.dentist.user.firstName} ${record.dentist.user.lastName}` : "Odontólogo no disponible"}
                     </p>
                   </div>
                 </div>
