@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { useAuth } from "@/hooks/use-auth";
+import { canAccessRoute } from "@/lib/route-access";
 import type { z } from "zod";
 import type { CompleteAppointmentSchema } from "@biodentis/shared-validators";
 import type { Appointment, Dentist, User, DentalUnit, EmailTemplate, SystemSetting, Clinic, MyProfile, SessionInfo, DashboardOverview, DashboardAgenda, AgendaRow, WaitingRoomRow, PatientList, PatientStats, PatientDetail } from "@biodentis/shared-types";
@@ -114,6 +116,10 @@ export function useCreateAppointment() {
     mutationFn: (data: unknown) => api.post("/api/appointments", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.appointments });
+      qc.invalidateQueries({ queryKey: queryKeys.patients });
+      qc.invalidateQueries({ queryKey: queryKeys.patientStats });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: queryKeys.dentists });
     },
   });
 }
@@ -132,8 +138,8 @@ export function useConfirmAppointment() {
 export function useCancelAppointment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      api.patch(`/api/appointments/${id}/cancel`, {}),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api.patch(`/api/appointments/${id}/cancel`, { reason }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.appointments });
     },
@@ -284,10 +290,12 @@ export function useUpdateDentistProfile() {
 
 // ─── Users ─────────────────────────────────────────────────────
 export function useUsers(role?: string) {
+  const { user } = useAuth();
   const params = role ? `?role=${role}` : "";
   return useQuery({
     queryKey: role ? queryKeys.usersByRole(role) : queryKeys.users,
     queryFn: () => api.get<User[]>(`/api/users${params}`),
+    enabled: canAccessRoute(user?.role, "/users"),
   });
 }
 
@@ -385,7 +393,10 @@ export function useUpdatePatient() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: unknown }) =>
       api.patch(`/api/patients/${id}`, data),
-    onSuccess: (_, { id }) => invalidatePatients(qc, id),
+    onSuccess: (_, { id }) => {
+      invalidatePatients(qc, id);
+      qc.invalidateQueries({ queryKey: queryKeys.appointments });
+    },
   });
 }
 
@@ -631,6 +642,7 @@ export function useCreateClinicException() {
     mutationFn: (data: unknown) => api.post<ClinicException>("/api/config/exceptions", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: configKeys.exceptions });
+      qc.invalidateQueries({ queryKey: queryKeys.dentists });
     },
   });
 }

@@ -344,14 +344,12 @@ async function main() {
     const date = dayOnly(spec.dayOffset);
     const plan = spec.dayOffset === 0 ? createdPlans.get(spec.patientIndex) : undefined;
 
-    // La clave unica es (dentista, fecha, hora): asi el seed es reejecutable.
-    const existing = await prisma.appointment.findUnique({
+    // Comprueba el fixture sin depender de una clave que incluya citas canceladas.
+    const existing = await prisma.appointment.findFirst({
       where: {
-        dentistId_date_startTime: {
           dentistId: assignedDentist.id,
           date,
           startTime: spec.startTime,
-        },
       },
     });
     if (existing) continue;

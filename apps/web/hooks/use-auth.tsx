@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from "react";
 import { Role } from "@biodentis/shared-types";
+import { useQueryClient } from "@tanstack/react-query";
+import { authenticatedFetch, getAccessToken, logoutSession, saveAccessToken, SessionExpiredError, SESSION_TOKEN_EVENT } from "@/lib/client-session";
 
 interface User {
   id: string;
@@ -15,12 +17,14 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isLoading: boolean;
+  sessionError: string | null;
 }
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<User>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
+  retrySession: () => void;
 }
 
 interface RegisterData {
@@ -35,20 +39,60 @@ interface RegisterData {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [state, setState] = useState<AuthState>({
     user: null,
     token: null,
     isLoading: true,
+    sessionError: null,
   });
 
   useEffect(() => {
-    const token = localStorage.getItem("accessToken");
-    const user = localStorage.getItem("user");
-    if (token && user) {
-      setState({ user: JSON.parse(user), token, isLoading: false });
-    } else {
-      setState((prev) => ({ ...prev, isLoading: false }));
+    let cancelled = false;
+    async function restoreSession() {
+      try {
+        // El rol almacenado en el navegador no es una fuente de autorización.
+        const response = await authenticatedFetch("/api/users/me", { cache: "no-store" }, false);
+        if (!response.ok) {
+          throw new Error("No se pudo verificar la sesión. Intenta nuevamente.");
+        }
+        const user: User & { isActive: boolean } = await response.json();
+        if (!user.isActive || cancelled) return;
+        localStorage.setItem("user", JSON.stringify(user));
+        queryClient.clear();
+        setState({ user, token: getAccessToken(), isLoading: false, sessionError: null });
+      } catch (error) {
+        if (!cancelled && !(error instanceof SessionExpiredError)) {
+          setState((prev) => ({ ...prev, sessionError: "No se pudo verificar la sesión. Revisa tu conexión e intenta nuevamente." }));
+        }
+      } finally {
+        if (!cancelled) setState((prev) => ({ ...prev, isLoading: false }));
+      }
     }
+    void restoreSession();
+    return () => { cancelled = true; };
+  }, [queryClient, restoreAttempt]);
+
+  useEffect(() => {
+    function syncToken() {
+      const token = getAccessToken();
+      setState((prev) => ({ ...prev, token, ...(token ? {} : { user: null }) }));
+    }
+    function syncStorage(event: StorageEvent) {
+      if (event.key === "accessToken" || event.key === null) syncToken();
+    }
+    window.addEventListener(SESSION_TOKEN_EVENT, syncToken);
+    window.addEventListener("storage", syncStorage);
+    return () => {
+      window.removeEventListener(SESSION_TOKEN_EVENT, syncToken);
+      window.removeEventListener("storage", syncStorage);
+    };
+  }, []);
+
+  const retrySession = useCallback(() => {
+    setState((prev) => ({ ...prev, isLoading: true, sessionError: null }));
+    setRestoreAttempt((attempt) => attempt + 1);
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -64,11 +108,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const data: { user: User; accessToken: string } = await res.json();
-    localStorage.setItem("accessToken", data.accessToken);
+    saveAccessToken(data.accessToken);
     localStorage.setItem("user", JSON.stringify(data.user));
-    setState({ user: data.user, token: data.accessToken, isLoading: false });
+    queryClient.clear();
+    setState({ user: data.user, token: data.accessToken, isLoading: false, sessionError: null });
     return data.user;
-  }, []);
+  }, [queryClient]);
 
   const register = useCallback(async (data: RegisterData) => {
     const res = await fetch("/api/auth/register", {
@@ -83,24 +128,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const result = await res.json();
-    localStorage.setItem("accessToken", result.accessToken);
+    saveAccessToken(result.accessToken);
     localStorage.setItem("user", JSON.stringify(result.user));
-    setState({ user: result.user, token: result.accessToken, isLoading: false });
-  }, []);
+    queryClient.clear();
+    setState({ user: result.user, token: result.accessToken, isLoading: false, sessionError: null });
+  }, [queryClient]);
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await logoutSession();
     } catch {
       // Silenciar errores de red — limpiar local igualmente
     }
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
-    setState({ user: null, token: null, isLoading: false });
-  }, []);
+    queryClient.clear();
+    setState({ user: null, token: null, isLoading: false, sessionError: null });
+  }, [queryClient]);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout }}>
+    <AuthContext.Provider value={{ ...state, login, register, logout, retrySession }}>
       {children}
     </AuthContext.Provider>
   );

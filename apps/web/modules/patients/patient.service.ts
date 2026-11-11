@@ -128,10 +128,11 @@ export class PatientService {
         patientCode: await nextPatientCode(),
         firstName: parsed.firstName,
         lastName: parsed.lastName,
+        dni: parsed.dni,
         phone: parsed.phone,
         address: parsed.address,
       },
-      select: { id: true, email: true, firstName: true, lastName: true, patientCode: true },
+      select: { id: true, email: true, firstName: true, lastName: true, dni: true, patientCode: true },
     });
 
     await auditService.log(actorId, "CREATE_PATIENT", "User", patient.id, `Alta de ${patient.patientCode}`);
@@ -183,14 +184,6 @@ export class PatientService {
       id,
       reason.trim()
     );
-
-    // Al desactivar se revocan sus sesiones: no debe poder seguir navegando.
-    if (!isActive) {
-      await prisma.refreshToken.updateMany({
-        where: { userId: id, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-    }
 
     return updated;
   }

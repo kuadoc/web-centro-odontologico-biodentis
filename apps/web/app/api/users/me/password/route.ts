@@ -8,7 +8,7 @@ const profileService = new ProfileService();
 /** Alias de /api/profile/password — misma logica y validacion. */
 export async function PATCH(request: NextRequest) {
   try {
-    const user = authenticate(request);
+    const user = await authenticate(request);
     const body = await request.json();
     const result = await profileService.changePassword(user.sub, body);
     return Response.json(result);

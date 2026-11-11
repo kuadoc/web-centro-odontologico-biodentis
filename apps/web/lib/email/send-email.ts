@@ -6,6 +6,7 @@ export type EmailType =
   | "password_reset"
   | "welcome"
   | "appointment_confirmation"
+  | "appointment_registration"
   | "appointment_reminder"
   | "appointment_cancelled";
 

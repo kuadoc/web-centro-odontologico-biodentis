@@ -3,7 +3,7 @@ import { AppointmentService } from "@/modules/appointments/appointment.service";
 import { requireRole } from "@/lib/middleware";
 import { handleApiError } from "@/lib/errors";
 import { Role } from "@biodentis/shared-types";
-import { sendAppointmentConfirmation } from "@/lib/email/send-emails";
+import { AppointmentNotificationService } from "@/modules/appointments/appointment-notification.service";
 
 const appointmentService = new AppointmentService();
 
@@ -16,22 +16,7 @@ export async function PATCH(
     const { id } = await params;
     const appointment = await appointmentService.confirm(id);
 
-    const fullAppointment = await appointmentService.getById(id);
-
-    const patientEmail = fullAppointment.patient.email;
-    const patientName = `${fullAppointment.patient.firstName} ${fullAppointment.patient.lastName}`;
-    const dentistName = `Dr. ${fullAppointment.dentist.user.firstName} ${fullAppointment.dentist.user.lastName}`;
-    const date = new Date(fullAppointment.date).toLocaleDateString("es-CL");
-    const time = fullAppointment.startTime;
-
-    sendAppointmentConfirmation(patientEmail, {
-      patientName,
-      dentistName,
-      date,
-      time,
-    }).catch((error) => {
-      console.error("[APPOINTMENT_CONFIRM_EMAIL_FAILED]", { appointmentId: id, error });
-    });
+    await new AppointmentNotificationService().sendBookingNotice(id);
 
     return Response.json(appointment);
   } catch (error) {

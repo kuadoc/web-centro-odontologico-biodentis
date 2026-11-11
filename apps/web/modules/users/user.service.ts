@@ -70,19 +70,33 @@ export class UserService {
     return rest;
   }
 
-  async update(userId: string, input: unknown) {
+  async update(userId: string, input: unknown, actorId?: string) {
     const { specialty, licenseNumber, university, ...data } = UpdateUserSchema.parse(input);
-    const user = await this.userRepository.findById(userId);
-    if (!user) throw new NotFoundError("Usuario no encontrado");
-    const result = await this.userRepository.update(userId, {
-      ...data,
-      ...((data.role ?? user.role) === "DENTIST" ? { dentistProfile: { upsert: {
-        create: { specialty: specialty ?? "General", licenseNumber, university },
-        update: { specialty, licenseNumber, university },
-      } } } : {}),
-    });
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { passwordHash, ...safeUser } = result;
-    return safeUser;
+    const apply = async (repository: UserRepository) => {
+      const user = await repository.findById(userId);
+      if (!user) throw new NotFoundError("Usuario no encontrado");
+      if (data.isActive === false) {
+        const { pending, confirmed } = await repository.countBlockingAppointments(userId);
+        if (pending || confirmed) {
+          throw new DomainError(
+            `No se puede desactivar al odontólogo: tiene ${pending} citas pendientes y ${confirmed} confirmadas. Coordina con Recepción la reasignación de las pendientes y con Administración las citas confirmadas.`, 409,
+          );
+        }
+      }
+      const result = await repository.update(userId, {
+        ...data,
+        ...((data.role ?? user.role) === "DENTIST" ? { dentistProfile: { upsert: {
+          create: { specialty: specialty ?? "General", licenseNumber, university },
+          update: { specialty, licenseNumber, university },
+        } } } : {}),
+      });
+      if (actorId && data.isActive !== undefined && user.isActive !== data.isActive) {
+        await repository.logStateChange(actorId, userId, data.isActive);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { passwordHash, ...safeUser } = result;
+      return safeUser;
+    };
+    return data.isActive === undefined ? apply(this.userRepository) : this.userRepository.withTransaction(apply);
   }
 }

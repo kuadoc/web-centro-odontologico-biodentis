@@ -5,6 +5,7 @@ import { setRefreshTokenCookie, getRefreshTokenFromCookie } from "@/lib/auth";
 
 const authService = new AuthService();
 
+/** POST /api/auth/refresh — renueva una sesión vigente mediante su cookie HttpOnly. */
 export async function POST(request: NextRequest) {
   try {
     const refreshToken = getRefreshTokenFromCookie(request);
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({
       accessToken: result.accessToken,
-    });
+    }, { headers: { "Cache-Control": "no-store" } });
 
     return setRefreshTokenCookie(response, result.refreshToken);
   } catch (error) {

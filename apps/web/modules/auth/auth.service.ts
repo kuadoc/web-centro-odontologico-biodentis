@@ -1,5 +1,4 @@
-import { prisma } from "@/lib/prisma";
-import { nextPatientCode } from "@/lib/patient-code";
+import { AuthRepository } from "@/modules/auth/auth.repository";
 import bcrypt from "bcrypt";
 import { RegisterSchema, LoginSchema } from "@biodentis/shared-validators";
 import { generateAccessToken, generateRefreshToken, hashToken, verifyRefreshToken } from "@/lib/auth";
@@ -8,42 +7,39 @@ import { AuthenticationError, DomainError, NotFoundError } from "@/lib/errors";
 const REFRESH_EXPIRATION_DAYS = 7;
 
 export class AuthService {
+  constructor(private readonly authRepository = new AuthRepository()) {}
+
   async register(data: unknown) {
     const parsed = RegisterSchema.parse(data);
 
-    const existing = await prisma.user.findUnique({ where: { email: parsed.email } });
+    const existing = await this.authRepository.findUserByEmail(parsed.email);
     if (existing) {
       throw new DomainError("El email ya está registrado", 409);
     }
 
     const passwordHash = await bcrypt.hash(parsed.password, 12);
 
-    const user = await prisma.user.create({
-      data: {
-        email: parsed.email,
-        passwordHash,
-        role: "PATIENT",
-        patientCode: await nextPatientCode(),
-        firstName: parsed.firstName,
-        lastName: parsed.lastName,
-        phone: parsed.phone,
-      },
+    const user = await this.authRepository.createPatient({
+      email: parsed.email,
+      passwordHash,
+      role: "PATIENT",
+      firstName: parsed.firstName,
+      lastName: parsed.lastName,
+      phone: parsed.phone,
     });
 
-    const accessToken = generateAccessToken(user.id);
     const { token: refreshToken, jti } = generateRefreshToken(user.id);
+    const accessToken = generateAccessToken(user.id, jti);
     const tokenHash = hashToken(refreshToken);
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_EXPIRATION_DAYS);
 
-    await prisma.refreshToken.create({
-      data: {
-        jti,
-        tokenHash,
-        userId: user.id,
-        expiresAt,
-      },
+    await this.authRepository.createRefreshToken({
+      jti,
+      tokenHash,
+      userId: user.id,
+      expiresAt,
     });
 
     return {
@@ -56,7 +52,7 @@ export class AuthService {
   async login(data: unknown) {
     const parsed = LoginSchema.parse(data);
 
-    const user = await prisma.user.findUnique({ where: { email: parsed.email } });
+    const user = await this.authRepository.findUserByEmail(parsed.email);
     if (!user) {
       throw new AuthenticationError("Credenciales inválidas");
     }
@@ -70,20 +66,18 @@ export class AuthService {
       throw new AuthenticationError("Credenciales inválidas");
     }
 
-    const accessToken = generateAccessToken(user.id);
     const { token: refreshToken, jti } = generateRefreshToken(user.id);
+    const accessToken = generateAccessToken(user.id, jti);
     const tokenHash = hashToken(refreshToken);
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_EXPIRATION_DAYS);
 
-    await prisma.refreshToken.create({
-      data: {
-        jti,
-        tokenHash,
-        userId: user.id,
-        expiresAt,
-      },
+    await this.authRepository.createRefreshToken({
+      jti,
+      tokenHash,
+      userId: user.id,
+      expiresAt,
     });
 
     return {
@@ -97,9 +91,7 @@ export class AuthService {
     const payload = verifyRefreshToken(refreshToken);
     const tokenHash = hashToken(refreshToken);
 
-    const storedToken = await prisma.refreshToken.findUnique({
-      where: { tokenHash },
-    });
+    const storedToken = await this.authRepository.findRefreshTokenByHash(tokenHash);
 
     if (!storedToken) {
       throw new AuthenticationError("Refresh token inválido");
@@ -118,7 +110,7 @@ export class AuthService {
       throw new AuthenticationError("Refresh token no pertenece a este usuario");
     }
 
-    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+    const user = await this.authRepository.findUserById(payload.sub);
     if (!user) {
       throw new NotFoundError("Usuario no encontrado");
     }
@@ -127,30 +119,19 @@ export class AuthService {
       throw new AuthenticationError("Cuenta desactivada");
     }
 
-    const accessToken = generateAccessToken(user.id);
     const { token: newRefreshToken, jti: newJti } = generateRefreshToken(user.id);
+    const accessToken = generateAccessToken(user.id, newJti);
     const newTokenHash = hashToken(newRefreshToken);
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_EXPIRATION_DAYS);
 
-    await prisma.$transaction([
-      prisma.refreshToken.update({
-        where: { tokenHash },
-        data: {
-          revokedAt: new Date(),
-          replacedByToken: newJti,
-        },
-      }),
-      prisma.refreshToken.create({
-        data: {
-          jti: newJti,
-          tokenHash: newTokenHash,
-          userId: user.id,
-          expiresAt,
-        },
-      }),
-    ]);
+    await this.authRepository.rotateRefreshToken(tokenHash, {
+      jti: newJti,
+      tokenHash: newTokenHash,
+      userId: user.id,
+      expiresAt,
+    }, new Date());
 
     return {
       accessToken,
@@ -161,16 +142,10 @@ export class AuthService {
   async logout(refreshToken: string) {
     const tokenHash = hashToken(refreshToken);
 
-    await prisma.refreshToken.updateMany({
-      where: { tokenHash, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    await this.authRepository.revokeRefreshToken(tokenHash, new Date());
   }
 
   async revokeAllUserTokens(userId: string) {
-    await prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    await this.authRepository.revokeAllUserTokens(userId, new Date());
   }
 }

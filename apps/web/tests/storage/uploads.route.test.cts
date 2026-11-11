@@ -4,6 +4,7 @@ import { test, type TestContext } from "node:test";
 import sharp from "sharp";
 import { NextRequest } from "next/server";
 import { StorageRepository } from "@/modules/storage/storage.repository";
+import { AccessSessionRepository } from "@/modules/auth/access-session.repository";
 import { LocalStorageDriver } from "@/modules/storage/drivers/local.driver";
 import { temporaryDirectory } from "./helpers.cts";
 
@@ -16,6 +17,10 @@ const { GET } = require("@/app/api/uploads/[...path]/route") as typeof import("@
 const { generateAccessToken } = require("@/lib/auth") as typeof import("@/lib/auth");
 
 async function setup(context: TestContext) {
+  context.mock.method(AccessSessionRepository.prototype, "findByJti", async (jti: string) => ({
+    userId: jti, revokedAt: null, expiresAt: new Date(Date.now() + 3_600_000),
+    user: { id: jti, isActive: true, role: "PATIENT" },
+  }));
   const directory = await temporaryDirectory(context);
   const driver = new LocalStorageDriver(directory);
   const bytes = await sharp({ create: { width: 10, height: 10, channels: 3, background: "white" } }).webp().toBuffer();
@@ -80,13 +85,13 @@ test("avatar privado: propietario y ADMIN activos pueden leer; otros reciben 403
   await fixture.driver.guardar(key, fixture.bytes);
   context.mock.method(StorageRepository.prototype, "buscarActor", async (id: string) => ({ id, isActive: true, role: id === admin ? "ADMIN" : "PATIENT" }));
   for (const actor of [owner, admin]) {
-    const response = await GET(request(key, generateAccessToken(actor)), params(key));
+    const response = await GET(request(key, generateAccessToken(actor, actor)), params(key));
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("Cache-Control"), "private, no-store");
     assert.equal(response.headers.get("Vary"), "Authorization");
     assert.deepEqual(Buffer.from(await response.arrayBuffer()), fixture.bytes);
   }
-  const denied = await GET(request(key, generateAccessToken(other)), params(key));
+  const denied = await GET(request(key, generateAccessToken(other, other)), params(key));
   assert.equal(denied.status, 403);
   assert.equal(denied.headers.get("Cache-Control"), "private, no-store");
   assert.equal(fixture.reads(), 2);
@@ -96,10 +101,10 @@ test("un usuario desactivado o eliminado no puede leer avatares con un JWT aún 
   const fixture = await setup(context);
   const owner = randomUUID(); const key = `avatares/${owner}/${randomUUID()}.webp`;
   const actorMock = context.mock.method(StorageRepository.prototype, "buscarActor", async () => ({ id: owner, role: "ADMIN", isActive: false }));
-  const inactive = await GET(request(key, generateAccessToken(owner)), params(key));
+  const inactive = await GET(request(key, generateAccessToken(owner, owner)), params(key));
   assert.equal(inactive.status, 401);
   actorMock.mock.mockImplementation(async () => null);
-  const missing = await GET(request(key, generateAccessToken(owner)), params(key));
+  const missing = await GET(request(key, generateAccessToken(owner, owner)), params(key));
   assert.equal(missing.status, 401);
   assert.equal(fixture.reads(), 0);
 });

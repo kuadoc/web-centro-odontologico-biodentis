@@ -11,10 +11,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireRole(request, [Role.ADMIN]);
+    const actor = await requireRole(request, [Role.ADMIN]);
     const { id } = await params;
     const body = await request.json();
-    const user = await userService.update(id, body);
+    const user = await userService.update(id, body, actor.sub);
     return Response.json(user);
   } catch (error) {
     return handleApiError(error);
@@ -26,9 +26,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireRole(request, [Role.ADMIN]);
+    const actor = await requireRole(request, [Role.ADMIN]);
     const { id } = await params;
-    await userService.update(id, { isActive: false });
+    await userService.update(id, { isActive: false }, actor.sub);
     return Response.json({ success: true });
   } catch (error) {
     return handleApiError(error);

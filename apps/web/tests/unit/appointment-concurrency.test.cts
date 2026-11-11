@@ -25,6 +25,10 @@ function databaseError(code: string) {
 test("reserva: comprueba solapamientos y guarda en la misma transacción serializable", async (context) => {
   const queries: unknown[] = [];
   const transaction = {
+    scheduleException: { findFirst: async () => null },
+    user: { findUnique: async () => ({ role: "PATIENT", isActive: true }) },
+    dentist: { findUnique: async () => ({ user: { isActive: true, role: "DENTIST" } }) },
+    availability: { findMany: async () => [{ startTime: "08:00", endTime: "18:00" }] },
     appointment: {
       findFirst: async (query: unknown) => { queries.push(query); return null; },
       create: async ({ data }: { data: typeof reservation }) => ({ id: "created", ...data }),
@@ -50,6 +54,10 @@ test("un conflicto concurrente reintenta la lectura y rechaza el horario ocupado
   let reads = 0;
   let writes = 0;
   const transaction = {
+    scheduleException: { findFirst: async () => null },
+    user: { findUnique: async () => ({ role: "PATIENT", isActive: true }) },
+    dentist: { findUnique: async () => ({ user: { isActive: true, role: "DENTIST" } }) },
+    availability: { findMany: async () => [{ startTime: "08:00", endTime: "18:00" }] },
     appointment: {
       findFirst: async () => ++reads === 1 ? null : { id: "other-reservation" },
       create: async () => { writes++; throw databaseError("P2034"); },
@@ -82,8 +90,11 @@ test("reprogramar excluye la cita actual y no escribe si otro intervalo se solap
   let occupied = false;
   let writes = 0;
   const transaction = {
+    scheduleException: { findFirst: async () => null },
+    dentist: { findUnique: async () => ({ user: { isActive: true, role: "DENTIST" } }) },
+    availability: { findMany: async () => [{ startTime: "08:00", endTime: "18:00" }] },
     appointment: {
-      findUnique: async () => ({ dentistId: "dentist" }),
+      findUnique: async () => ({ dentistId: "dentist", status: "CONFIRMED", clinicalRecord: null, cancellations: [] }),
       findFirst: async (query: { where: { id: { not: string } } }) => {
         assert.deepEqual(query.where.id, { not: "current" });
         return occupied ? { id: "other" } : null;

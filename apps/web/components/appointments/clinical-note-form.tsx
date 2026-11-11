@@ -123,8 +123,8 @@ function NoteItems({
                 }
                 placeholder={
                   diagnosis
-                    ? "Nombre del diagnóstico"
-                    : "Procedimiento realizado"
+                    ? "Ej. Caries dental"
+                    : "Ej. Limpieza dental"
                 }
                 disabled={disabled}
                 maxLength={2000}
@@ -189,7 +189,7 @@ function NoteItems({
           className="max-w-full min-w-0"
         >
           <SelectTrigger>
-            <SelectValue>{() => "Elegir frecuente…"}</SelectValue>
+            <SelectValue>{() => diagnosis ? "Añadir diagnóstico frecuente" : "Añadir procedimiento frecuente"}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {frequent.map((name) => (
@@ -288,6 +288,7 @@ export function ClinicalNoteForm({
           </p>
           <Select
             aria-labelledby="next-control-label"
+            placeholder="Selecciona cuándo debe volver el paciente"
             selectedKey={control}
             onSelectionChange={(key) => {
               if (key && Object.hasOwn(controlLabels, key))

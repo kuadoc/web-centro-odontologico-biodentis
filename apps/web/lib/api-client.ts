@@ -1,35 +1,18 @@
 "use client";
 
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("accessToken");
-}
+import { authenticatedFetch } from "@/lib/client-session";
 
-function clearAuth(): void {
-  if (typeof window === "undefined") return;
-  fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-  localStorage.removeItem("accessToken");
-  localStorage.removeItem("user");
-  window.location.href = "/login";
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
 }
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...((options.headers as Record<string, string>) || {}),
-  };
-
-  const token = getToken();
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(url, { ...options, headers });
-
-  if (res.status === 401) {
-    clearAuth();
-    throw new Error("Sesión expirada");
-  }
+  const headers = new Headers(options.headers);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const res = await authenticatedFetch(url, { ...options, headers });
 
   if (!res.ok) {
     let errMsg = "Error en la solicitud";
@@ -39,7 +22,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     } catch {
       errMsg = `HTTP ${res.status} ${res.statusText}`;
     }
-    throw new Error(errMsg);
+    throw new ApiError(errMsg, res.status);
   }
 
   return res.json();
@@ -52,15 +35,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
  * Authorization, no en una cookie: hay que pedirlo por fetch y volcarlo a un blob.
  */
 async function download(url: string, fallbackName: string): Promise<void> {
-  const token = getToken();
-  const res = await fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-
-  if (res.status === 401) {
-    clearAuth();
-    throw new Error("Sesión expirada");
-  }
+  const res = await authenticatedFetch(url);
   if (!res.ok) throw new Error(`No se pudo descargar el archivo (HTTP ${res.status})`);
 
   // El nombre real viene en Content-Disposition; si falta, usamos el de respaldo.

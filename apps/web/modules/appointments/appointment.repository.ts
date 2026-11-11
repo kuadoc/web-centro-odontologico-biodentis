@@ -1,27 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import { AppointmentStatus } from "@biodentis/shared-types";
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { NotFoundError, ScheduleConflictError } from "@/lib/errors";
+import { DomainError, NotFoundError, ScheduleConflictError } from "@/lib/errors";
+import { withScheduleTransaction } from "./schedule-transaction.repository";
+import { AvailabilityRepository } from "@/modules/availability/availability.repository";
+import { AuditService } from "@/modules/audit/audit.service";
+import { AuditRepository } from "@/modules/audit/audit.repository";
 
 export class AppointmentRepository {
   constructor(private readonly transactions: Pick<PrismaClient, "$transaction"> = prisma) {}
 
   /** Reintenta toda la operación si PostgreSQL detecta escrituras concurrentes. */
   private async writeSchedule<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        return await this.transactions.$transaction(operation, {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        });
-      } catch (error) {
-        if (!(error instanceof Prisma.PrismaClientKnownRequestError)) throw error;
-        if (error.code === "P2002") {
-          throw new ScheduleConflictError("El odontólogo ya tiene una cita en ese horario");
-        }
-        if (error.code !== "P2034") throw error;
-      }
-    }
-    throw new ScheduleConflictError("La agenda cambió durante la reserva. Vuelve a consultar los horarios disponibles.");
+    return withScheduleTransaction(this.transactions, operation);
   }
 
   private async requireFreeSlot(
@@ -31,7 +22,21 @@ export class AppointmentRepository {
     startTime: string,
     endTime: string,
     excludeId?: string,
+    dentalUnitId?: string | null,
   ): Promise<void> {
+    const dentist = await tx.dentist.findUnique({
+      where: { id: dentistId }, select: { user: { select: { isActive: true, role: true } } },
+    });
+    if (!dentist || !dentist.user.isActive || dentist.user.role !== "DENTIST") {
+      throw new DomainError("El odontólogo no está activo. Selecciona otro profesional.", 409);
+    }
+    if (await new AvailabilityRepository(tx).findException(dentistId, date, dentalUnitId)) {
+      throw new ScheduleConflictError("Existe una excepción de calendario para el odontólogo, la clínica o la unidad asignada. Selecciona otra fecha o recurso.");
+    }
+    const hours = await tx.availability.findMany({ where: { dentistId, dayOfWeek: date.getUTCDay() } });
+    if (!hours.some((block) => block.startTime <= startTime && block.endTime >= endTime)) {
+      throw new ScheduleConflictError("El horario del odontólogo cambió o no cubre esta cita. Vuelve a consultar su disponibilidad.");
+    }
     const conflict = await tx.appointment.findFirst({
       where: {
         dentistId,
@@ -50,7 +55,7 @@ export class AppointmentRepository {
     return prisma.appointment.findUnique({
       where: { id },
       include: {
-        patient: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+        patient: { select: { id: true, firstName: true, lastName: true, dni: true, email: true, phone: true } },
         dentist: { include: { user: { select: { firstName: true, lastName: true } } } },
         clinicalRecord: { select: { notes: true } },
         treatment: { select: { id: true, name: true, category: true, specialty: { select: { name: true } } } },
@@ -67,7 +72,7 @@ export class AppointmentRepository {
         date: filter.from && filter.to ? { gte: filter.from, lte: filter.to } : undefined,
       },
       include: {
-        patient: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+        patient: { select: { id: true, firstName: true, lastName: true, dni: true, email: true, phone: true } },
         dentist: { include: { user: { select: { firstName: true, lastName: true } } } },
         clinicalRecord: { select: { notes: true } },
         treatment: { select: { id: true, name: true, category: true, specialty: { select: { name: true } } } },
@@ -85,30 +90,47 @@ export class AppointmentRepository {
     notes?: string;
     treatmentId?: string;
     status?: AppointmentStatus;
-  }) {
+    dentalUnitId?: string;
+  }, actorId?: string) {
     return this.writeSchedule(async (tx) => {
-      await this.requireFreeSlot(tx, data.dentistId, data.date, data.startTime, data.endTime);
-      return tx.appointment.create({ data });
+      await this.requireFreeSlot(tx, data.dentistId, data.date, data.startTime, data.endTime, undefined, data.dentalUnitId);
+      const patient = await tx.user.findUnique({ where: { id: data.patientId }, select: { role: true, isActive: true } });
+      if (!patient || patient.role !== "PATIENT" || !patient.isActive) {
+        throw new DomainError("El paciente seleccionado no existe o su cuenta está inactiva. Actualiza la lista y selecciona un paciente activo.", 409);
+      }
+      const appointment = await tx.appointment.create({ data });
+      if (actorId) await new AuditService(new AuditRepository(tx)).log(actorId, "CREATE_CONFIRMED_APPOINTMENT", "Appointment", appointment.id, JSON.stringify({ patientId: data.patientId, dentistId: data.dentistId, treatmentId: data.treatmentId, date: data.date.toISOString().slice(0, 10), startTime: data.startTime, endTime: data.endTime, status: data.status }));
+      return appointment;
     });
   }
 
   async updateStatus(id: string, status: AppointmentStatus) {
-    return prisma.appointment.update({ where: { id }, data: { status } });
+    const expected = status === "CONFIRMED" ? "PENDING" : "CONFIRMED";
+    try {
+      return await prisma.appointment.update({ where: { id, status: expected }, data: { status } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new DomainError("La cita cambió de estado. Actualiza la bandeja antes de continuar.", 409);
+      }
+      throw error;
+    }
   }
 
   /** Crea la nota clínica y marca la cita como COMPLETED de forma atómica. */
   async completeWithRecord(id: string, patientId: string, dentistId: string, notes: string) {
     return prisma.$transaction(async (tx) => {
       await tx.clinicalRecord.create({ data: { patientId, dentistId, appointmentId: id, notes } });
-      return tx.appointment.update({ where: { id }, data: { status: "COMPLETED" } });
+      return tx.appointment.update({ where: { id, status: "CONFIRMED" }, data: { status: "COMPLETED" } });
     });
   }
 
   async reschedule(id: string, date: Date, startTime: string, endTime: string) {
     return this.writeSchedule(async (tx) => {
-      const appointment = await tx.appointment.findUnique({ where: { id }, select: { dentistId: true } });
+      const appointment = await tx.appointment.findUnique({ where: { id }, select: { dentistId: true, dentalUnitId: true, status: true, clinicalRecord: { select: { id: true } }, cancellations: { where: { state: "REQUESTED" }, select: { id: true }, take: 1 } } });
       if (!appointment) throw new NotFoundError("Cita no encontrada");
-      await this.requireFreeSlot(tx, appointment.dentistId, date, startTime, endTime, id);
+      if (!["PENDING", "CONFIRMED"].includes(appointment.status) || appointment.clinicalRecord) throw new DomainError("La cita cambió de estado y no puede reprogramarse.", 409);
+      if (appointment.cancellations.length) throw new DomainError("Resuelve la solicitud de cancelación antes de reprogramar esta cita.", 409);
+      await this.requireFreeSlot(tx, appointment.dentistId, date, startTime, endTime, id, appointment.dentalUnitId);
       return tx.appointment.update({ where: { id }, data: { date, startTime, endTime } });
     });
   }

@@ -121,7 +121,7 @@ function ResetPasswordForm() {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="Crea una contraseña de al menos 8 caracteres"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -133,7 +133,7 @@ function ResetPasswordForm() {
               <Input
                 id="confirmPassword"
                 type="password"
-                placeholder="••••••••"
+                placeholder={password ? "Repite exactamente la nueva contraseña" : "Primero escribe tu nueva contraseña"}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required

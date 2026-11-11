@@ -9,7 +9,7 @@ const profileService = new ProfileService();
 /** GET /api/profile/sessions — sesiones activas del usuario. */
 export async function GET(request: NextRequest) {
   try {
-    const user = authenticate(request);
+    const user = await authenticate(request);
     const sessions = await profileService.getMySessions(user.sub, getRefreshTokenFromCookie(request));
     return Response.json(sessions);
   } catch (error) {
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 /** DELETE /api/profile/sessions — cierra todas las sesiones salvo la actual. */
 export async function DELETE(request: NextRequest) {
   try {
-    const user = authenticate(request);
+    const user = await authenticate(request);
     const result = await profileService.revokeOtherSessions(user.sub, getRefreshTokenFromCookie(request));
     return Response.json(result);
   } catch (error) {

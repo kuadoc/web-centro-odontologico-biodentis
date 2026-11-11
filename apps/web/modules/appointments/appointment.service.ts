@@ -1,4 +1,5 @@
 import { AppointmentRepository } from "./appointment.repository";
+import { AppointmentNotificationService } from "./appointment-notification.service";
 import { AvailabilityService } from "@/modules/availability/availability.service";
 import {
   RequestAppointmentSchema,
@@ -14,6 +15,9 @@ import { AppointmentStatus, Role } from "@biodentis/shared-types";
 import { AuditService } from "@/modules/audit/audit.service";
 import { CatalogAdminService } from "@/modules/service-catalog/catalog-admin.service";
 import { ValidationError, DomainError, ScheduleConflictError, NotFoundError, AuthorizationError } from "@/lib/errors";
+import type { z } from "zod";
+
+type RequestAppointmentInput = z.infer<typeof RequestAppointmentSchema>;
 
 const appointmentRepository = new AppointmentRepository();
 const availabilityService = new AvailabilityService();
@@ -54,9 +58,36 @@ export class AppointmentService {
    * HU-03: un PATIENT solo puede reservar un bloque libre calculado de la agenda del
    * dentista (sin excepciones ni citas); la hora de fin se toma del bloque, no del cliente.
    */
-  async create(data: unknown, patientId: string, actorRole?: Role) {
+  async create(data: unknown, patientId: string, actorRole?: Role, actorId?: string) {
     const parsed = RequestAppointmentSchema.parse(data);
-    if (actorRole === Role.PATIENT && !parsed.treatmentId) throw new ValidationError("Selecciona el servicio que deseas reservar.");
+    const bookingForPatient = this.validateBookingActor(parsed, actorRole, actorId);
+    parsed.endTime = await this.resolveBookingEndTime(parsed, actorRole);
+    await this.requireBookingTimeAvailable(parsed);
+
+    const appointment = await appointmentRepository.create({
+      patientId: bookingForPatient ? parsed.patientId! : patientId,
+      dentistId: parsed.dentistId,
+      date: new Date(parsed.date),
+      startTime: parsed.startTime,
+      endTime: parsed.endTime,
+      notes: parsed.notes,
+      treatmentId: parsed.treatmentId,
+      // Las reservas gestionadas por Recepción ya fueron revisadas y confirmadas.
+      status: actorRole === Role.RECEPTIONIST ? AppointmentStatus.CONFIRMED : AppointmentStatus.PENDING,
+    }, actorRole === Role.RECEPTIONIST ? actorId : undefined);
+    await new AppointmentNotificationService().sendBookingNotice(appointment.id);
+    return appointment;
+  }
+
+  private validateBookingActor(parsed: RequestAppointmentInput, actorRole?: Role, actorId?: string): boolean {
+    const bookingForPatient = actorRole === Role.RECEPTIONIST || actorRole === Role.ADMIN;
+    if (bookingForPatient && !parsed.patientId) throw new ValidationError("Selecciona el paciente para quien se registrará la cita.");
+    if (actorRole === Role.RECEPTIONIST && !actorId) throw new AuthorizationError("No se pudo identificar al responsable de la confirmación.");
+    if ((actorRole === Role.PATIENT || actorRole === Role.RECEPTIONIST) && !parsed.treatmentId) throw new ValidationError("Selecciona el servicio que deseas reservar.");
+    return bookingForPatient;
+  }
+
+  private async resolveBookingEndTime(parsed: RequestAppointmentInput, actorRole?: Role): Promise<string> {
     if (parsed.treatmentId) await new CatalogAdminService().requireBookable(parsed.treatmentId, parsed.dentistId);
 
     if (actorRole === Role.PATIENT || parsed.treatmentId) {
@@ -65,9 +96,13 @@ export class AppointmentService {
       if (!slot) {
         throw new ScheduleConflictError("El horario seleccionado ya no esta disponible");
       }
-      parsed.endTime = slot.endTime;
+      return slot.endTime;
     }
 
+    return parsed.endTime;
+  }
+
+  private async requireBookingTimeAvailable(parsed: RequestAppointmentInput): Promise<void> {
     if (!isValidTimeRange(parsed.startTime, parsed.endTime)) {
       throw new ValidationError("Rango de horario inválido");
     }
@@ -82,18 +117,6 @@ export class AppointmentService {
     if (conflict) {
       throw new ScheduleConflictError("El odontólogo ya tiene una cita en ese horario");
     }
-
-    return appointmentRepository.create({
-      patientId,
-      dentistId: parsed.dentistId,
-      date: new Date(parsed.date),
-      startTime: parsed.startTime,
-      endTime: parsed.endTime,
-      notes: parsed.notes,
-      treatmentId: parsed.treatmentId,
-      // HU-03: toda cita nueva nace PENDING hasta que Recepcion la confirme.
-      status: AppointmentStatus.PENDING,
-    });
   }
 
   async confirm(id: string) {
@@ -107,24 +130,16 @@ export class AppointmentService {
     return appointmentRepository.updateStatus(id, AppointmentStatus.CONFIRMED);
   }
 
-  async cancel(id: string) {
+  async reschedule(id: string, data: unknown, actor: { userId: string; role: Role }) {
     const appointment = await appointmentRepository.findById(id);
     if (!appointment) throw new NotFoundError("Cita no encontrada");
 
-    if (!canCancelOrReschedule(appointment.date, appointment.startTime)) {
-      throw new DomainError("No se puede cancelar una cita con menos de 24 horas de anticipación");
+    if (![Role.PATIENT, Role.RECEPTIONIST, Role.ADMIN].includes(actor.role) || (actor.role === Role.PATIENT && appointment.patientId !== actor.userId)) {
+      throw new AuthorizationError("No tienes permiso para reprogramar esta cita");
     }
-
-    if (!isValidTransition(appointment.status as AppointmentStatus, AppointmentStatus.CANCELLED)) {
-      throw new DomainError(`No se puede cancelar una cita en estado ${appointment.status}`);
+    if (!["PENDING", "CONFIRMED"].includes(appointment.status) || appointment.clinicalRecord) {
+      throw new DomainError("Solo se pueden reprogramar citas pendientes o confirmadas sin atención registrada.", 409);
     }
-
-    return appointmentRepository.updateStatus(id, AppointmentStatus.CANCELLED);
-  }
-
-  async reschedule(id: string, data: unknown) {
-    const appointment = await appointmentRepository.findById(id);
-    if (!appointment) throw new NotFoundError("Cita no encontrada");
 
     if (!canCancelOrReschedule(appointment.date, appointment.startTime)) {
       throw new DomainError("No se puede reprogramar una cita con menos de 24 horas de anticipación");

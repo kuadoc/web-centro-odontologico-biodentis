@@ -9,7 +9,7 @@ import styles from "./landing.module.css";
 
 const links = [["hero", "Inicio"], ["especialidades", "Especialidades"], ["servicios", "Servicios y precios"], ["equipo", "Equipo"], ["horarios", "Horarios"], ["contacto", "Contacto"]] as const;
 
-export function LandingHeader() {
+export function LandingHeader({ name = "BIODENTIS" }: { name?: string }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState("hero");
 
@@ -34,7 +34,7 @@ export function LandingHeader() {
   return (
     <header className={styles.header}>
       <div className={`${styles.container} ${styles.headerInner}`}>
-        <Link href="/" className={styles.brand} aria-label="Biodentis, inicio"><BrandLogo /><small>ODONTOLOGÍA ESPECIALIZADA</small></Link>
+        <Link href="/" className={styles.brand} aria-label={`${name}, inicio`}><BrandLogo name={name} /><small>ODONTOLOGÍA ESPECIALIZADA</small></Link>
         <nav className={styles.desktopNav} aria-label="Navegación principal">{links.map(([id, label]) => <a key={id} href={`#${id}`} aria-current={active === id ? "location" : undefined}>{label}</a>)}</nav>
         <div className={styles.headerActions}>
           <ThemeSelector />

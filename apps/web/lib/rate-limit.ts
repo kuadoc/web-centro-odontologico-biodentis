@@ -18,7 +18,7 @@ export class RateLimiter {
   private cleanup() {
     const now = Date.now();
     for (const [key, entry] of this.store) {
-      if (now > entry.resetAt) {
+      if (now >= entry.resetAt) {
         this.store.delete(key);
       }
     }
@@ -27,7 +27,7 @@ export class RateLimiter {
   isBlocked(key: string): boolean {
     const entry = this.store.get(key);
     if (!entry) return false;
-    if (Date.now() > entry.resetAt) {
+    if (Date.now() >= entry.resetAt) {
       this.store.delete(key);
       return false;
     }
@@ -38,7 +38,7 @@ export class RateLimiter {
     const now = Date.now();
     const entry = this.store.get(key);
 
-    if (!entry || now > entry.resetAt) {
+    if (!entry || now >= entry.resetAt) {
       this.store.set(key, { count: 1, resetAt: now + this.windowMs });
       return { blocked: false, remainingMs: 0 };
     }

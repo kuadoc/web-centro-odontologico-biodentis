@@ -39,6 +39,8 @@ export async function sendAppointmentConfirmation(
     dentistName: string;
     date: string;
     time: string;
+    serviceName?: string;
+    specialtyName?: string;
   }
 ): Promise<boolean> {
   return sendEmail({
@@ -46,6 +48,27 @@ export async function sendAppointmentConfirmation(
     subject: "Cita confirmada - BIODENTIS",
     react: AppointmentConfirmationEmail({ ...data, clinicName: "BIODENTIS" }),
     type: "appointment_confirmation",
+  });
+}
+
+export async function sendAppointmentRegistration(
+  to: string,
+  data: {
+    patientName: string;
+    dentistName: string;
+    date: string;
+    time: string;
+    serviceName: string;
+    specialtyName: string;
+    status: "PENDING" | "CONFIRMED";
+  }
+): Promise<boolean> {
+  const confirmed = data.status === "CONFIRMED";
+  return sendEmail({
+    to,
+    subject: confirmed ? "Cita confirmada - BIODENTIS" : "Cita registrada, pendiente de confirmación - BIODENTIS",
+    react: AppointmentConfirmationEmail({ ...data, clinicName: "BIODENTIS" }),
+    type: confirmed ? "appointment_confirmation" : "appointment_registration",
   });
 }
 
