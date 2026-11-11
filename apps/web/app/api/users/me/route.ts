@@ -9,7 +9,7 @@ const profileService = new ProfileService();
 
 export async function GET(request: NextRequest) {
   try {
-    const user = authenticate(request);
+    const user = await authenticate(request);
     const profile = await userService.getProfile(user.sub);
     return Response.json(profile);
   } catch (error) {
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 /** Delega en ProfileService para compartir validacion con /api/profile. */
 export async function PATCH(request: NextRequest) {
   try {
-    const user = authenticate(request);
+    const user = await authenticate(request);
     const body = await request.json();
     const updated = await profileService.updateMyProfile(user.sub, body);
     return Response.json(updated);

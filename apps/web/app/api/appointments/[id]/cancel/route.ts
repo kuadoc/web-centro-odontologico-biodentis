@@ -1,40 +1,19 @@
 import { NextRequest } from "next/server";
-import { AppointmentService } from "@/modules/appointments/appointment.service";
+import { Role } from "@biodentis/shared-types";
+import { AppointmentNotificationService } from "@/modules/appointments/appointment-notification.service";
+import { CancellationService } from "@/modules/appointments/cancellation.service";
 import { requireRole } from "@/lib/middleware";
 import { handleApiError } from "@/lib/errors";
-import { Role } from "@biodentis/shared-types";
-import { sendAppointmentCancelled } from "@/lib/email/send-emails";
 
-const appointmentService = new AppointmentService();
+const service = new CancellationService();
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+/** PATCH /api/appointments/[id]/cancel — cancel; exclusivo de RECEPTIONIST. */
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireRole(request, [Role.PATIENT, Role.DENTIST, Role.RECEPTIONIST, Role.ADMIN]);
+    const actor = await requireRole(request, [Role.RECEPTIONIST]);
     const { id } = await params;
-
-    const fullAppointment = await appointmentService.getById(id);
-    const appointment = await appointmentService.cancel(id);
-
-    const patientEmail = fullAppointment.patient.email;
-    const patientName = `${fullAppointment.patient.firstName} ${fullAppointment.patient.lastName}`;
-    const dentistName = `Dr. ${fullAppointment.dentist.user.firstName} ${fullAppointment.dentist.user.lastName}`;
-    const date = new Date(fullAppointment.date).toLocaleDateString("es-CL");
-    const time = fullAppointment.startTime;
-
-    sendAppointmentCancelled(patientEmail, {
-      patientName,
-      dentistName,
-      date,
-      time,
-    }).catch((error) => {
-      console.error("[APPOINTMENT_CANCEL_EMAIL_FAILED]", { appointmentId: id, error });
-    });
-
-    return Response.json(appointment);
-  } catch (error) {
-    return handleApiError(error);
-  }
+    const result = await service.cancel(id, await request.json(), actor.sub);
+    await new AppointmentNotificationService().sendCancellationNotice(id);
+    return Response.json(result);
+  } catch (error) { return handleApiError(error); }
 }

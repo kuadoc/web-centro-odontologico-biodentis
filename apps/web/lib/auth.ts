@@ -8,6 +8,7 @@ const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET!;
 export interface AccessTokenPayload {
   sub: string;
   jti: string;
+  sid: string;
 }
 
 export interface RefreshTokenPayload {
@@ -15,9 +16,9 @@ export interface RefreshTokenPayload {
   jti: string;
 }
 
-export function generateAccessToken(userId: string): string {
+export function generateAccessToken(userId: string, sessionId: string): string {
   const jti = crypto.randomUUID();
-  return jwt.sign({ sub: userId, jti }, JWT_ACCESS_SECRET, { expiresIn: "15m" });
+  return jwt.sign({ sub: userId, jti, sid: sessionId }, JWT_ACCESS_SECRET, { expiresIn: "15m" });
 }
 
 export function generateRefreshToken(userId: string): { token: string; jti: string } {

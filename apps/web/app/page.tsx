@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowDown, ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronDown, Clock3, CreditCard, Mail, MapPin, MessageCircle, Navigation, Phone, ScanLine, Search as SearchIcon, ShieldCheck, Smile, Users } from "lucide-react";
 import { LandingHeader } from "@/components/landing/landing-header";
 import { OpeningStatus } from "@/components/landing/opening-status";
-import { clinic } from "@/lib/landing-content";
+import { clinic as landingDefaults } from "@/lib/landing-content";
+import { ClinicService } from "@/modules/clinic/clinic.service";
 import { DentistCarousel } from "@/components/landing/dentist-carousel";
 import { ServiceExplorer } from "@/components/landing/service-explorer";
 import { BrandLogo } from "@/components/brand-logo";
@@ -18,22 +20,24 @@ export const metadata: Metadata = {
 };
 
 const booking = "/login?callbackUrl=%2Fappointments%3Fnew%3D1";
-const schema = {
-  "@context": "https://schema.org", "@type": "Dentist", name: "BIODENTIS", url: "https://biodentis.com", telephone: clinic.internationalPhone, email: clinic.email,
-  image: "https://biodentis.com/images/plena_operacion.jpeg",
-  address: { "@type": "PostalAddress", streetAddress: clinic.streetAddress, addressLocality: clinic.district, addressRegion: clinic.region, postalCode: clinic.postalCode, addressCountry: clinic.country },
-  openingHoursSpecification: [{ "@type": "OpeningHoursSpecification", dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], opens: "08:00", closes: "18:00" }, { "@type": "OpeningHoursSpecification", dayOfWeek: "Saturday", opens: "09:00", closes: "14:00" }],
-};
+export default async function HomePage() {
+  await connection();
+  const clinic = await new ClinicService().getPublic();
+  const schema = {
+    "@context": "https://schema.org", "@type": "Dentist", name: clinic.name, url: "https://biodentis.com", telephone: clinic.internationalPhone, email: clinic.email,
+    image: "https://biodentis.com/images/plena_operacion.jpeg",
+    address: { "@type": "PostalAddress", streetAddress: clinic.address, addressCountry: "PE" },
+    openingHoursSpecification: [{ "@type": "OpeningHoursSpecification", dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], opens: "08:00", closes: "18:00" }, { "@type": "OpeningHoursSpecification", dayOfWeek: "Saturday", opens: "09:00", closes: "14:00" }],
+  };
 
-export default function HomePage() {
   return (
     <div className={styles.landing}>
       <a href="#contenido" className={styles.skipLink}>Saltar al contenido</a>
-      <LandingHeader />
+      <LandingHeader name={clinic.name} />
       <main id="contenido">
         <section id="hero" className={styles.hero}>
           <div className={styles.container}>
-            <div className={styles.heroEyebrow}><span className={styles.eyebrow}><span className={styles.statusDot} /> PRECISIÓN CLÍNICA. ATENCIÓN HUMANA.</span><span className={styles.locationLabel}><MapPin size={13} /> {clinic.district.toUpperCase()}, {clinic.region.toUpperCase()}</span></div>
+            <div className={styles.heroEyebrow}><span className={styles.eyebrow}><span className={styles.statusDot} /> PRECISIÓN CLÍNICA. ATENCIÓN HUMANA.</span><span className={styles.locationLabel}><MapPin size={13} /> {clinic.name}</span></div>
             <div className={styles.heroGrid}>
               <div className={styles.heroCopy}>
                 <span className={styles.pill}><ShieldCheck size={13} /> Centro odontológico especializado</span>
@@ -75,10 +79,10 @@ export default function HomePage() {
 
         <section id="contacto" className={styles.section}>
           <div className={styles.container}>
-            <div className={styles.sectionHeading}><div><span className={styles.eyebrow}>05 / NUESTRA CLÍNICA</span><h2>Un espacio para sentirte tranquilo.</h2></div><p>Instalaciones equipadas para tu atención, en Los Olivos, Lima. Estamos cerca para acompañarte en cada visita.</p></div>
+            <div className={styles.sectionHeading}><div><span className={styles.eyebrow}>05 / NUESTRA CLÍNICA</span><h2>Un espacio para sentirte tranquilo.</h2></div><p>Instalaciones equipadas para tu atención en {clinic.name}. Estamos cerca para acompañarte en cada visita.</p></div>
             <div className={styles.contactGrid}>
-              <a className={styles.map} href={clinic.maps} target="_blank" rel="noopener noreferrer" aria-label="Ver la ubicación de Biodentis en Google Maps"><span className={styles.mapLabel}><MapPin size={18} /> BIODENTIS · {clinic.district.toUpperCase()}</span><span className={styles.mapPin}><MapPin size={44} strokeWidth={1.25} /><strong>Tu próxima visita, aquí.</strong><span>{clinic.address}</span></span><span className={styles.mapFooter}><span><Navigation size={15} /> Cómo llegar a la clínica</span><span>Abrir en Google Maps <ArrowUpRight size={15} /></span></span></a>
-              <div className={styles.contactCard}><span className={styles.eyebrow}>SEDE {clinic.district.toUpperCase()}</span><h3>Te esperamos en Biodentis.</h3><p>Una atención cercana comienza desde el primer contacto.</p><div className={styles.contactDetails}><div><MapPin size={19} /><div><small>DIRECCIÓN</small><strong>{clinic.address}</strong><span>{clinic.location}</span></div></div><div><Phone size={19} /><div><small>CENTRAL TELEFÓNICA</small><a href={clinic.phoneHref}>{clinic.phone}</a></div></div><div><Mail size={19} /><div><small>CORREO ELECTRÓNICO</small><a href={`mailto:${clinic.email}`}>{clinic.email}</a></div></div></div><a className={styles.primaryButton} href={clinic.whatsapp} target="_blank" rel="noopener noreferrer"><MessageCircle size={16} /> Hablemos por WhatsApp <ArrowUpRight size={15} /></a></div>
+              <a className={styles.map} href={clinic.maps} target="_blank" rel="noopener noreferrer" aria-label={`Ver la ubicación de ${clinic.name} en Google Maps`}><span className={styles.mapLabel}><MapPin size={18} /> {clinic.name}</span><span className={styles.mapPin}><MapPin size={44} strokeWidth={1.25} /><strong>Tu próxima visita, aquí.</strong><span>{clinic.address}</span></span><span className={styles.mapFooter}><span><Navigation size={15} /> Cómo llegar a la clínica</span><span>Abrir en Google Maps <ArrowUpRight size={15} /></span></span></a>
+              <div className={styles.contactCard}><span className={styles.eyebrow}>{clinic.name}</span><h3>Te esperamos en {clinic.name}.</h3><p>Una atención cercana comienza desde el primer contacto.</p><div className={styles.contactDetails}><div><MapPin size={19} /><div><small>DIRECCIÓN</small><strong>{clinic.address}</strong></div></div><div><Phone size={19} /><div><small>CENTRAL TELEFÓNICA</small><a href={clinic.phoneHref}>{clinic.phone}</a></div></div><div><Mail size={19} /><div><small>CORREO ELECTRÓNICO</small><a href={`mailto:${clinic.email}`}>{clinic.email}</a></div></div></div><a className={styles.primaryButton} href={clinic.whatsapp} target="_blank" rel="noopener noreferrer"><MessageCircle size={16} /> Hablemos por WhatsApp <ArrowUpRight size={15} /></a></div>
             </div>
           </div>
         </section>
@@ -86,7 +90,7 @@ export default function HomePage() {
         <section className={`${styles.section} ${styles.subtleSection}`} id="horarios">
           <div className={`${styles.container} ${styles.hoursGrid}`}>
             <div><span className={styles.eyebrow}>06 / A TU TIEMPO</span><h2>Hagamos espacio<br />para tu salud.</h2><p className={styles.description}>Organiza tu visita y encuentra un horario que funcione para ti. Puedes consultar disponibilidad desde tu cuenta o escribirnos para recibir orientación.</p><Link className={styles.textLink} href={booking}>Consultar citas disponibles <ArrowRight size={16} /></Link></div>
-            <div className={styles.hoursCard}><div className={styles.hoursHeader}><Clock3 size={20} /><h3>Horario de atención</h3></div><OpeningStatus /><dl className={styles.hoursTable}><div><dt>Lunes a viernes</dt><dd>{clinic.weekdayHours}<small>Horario continuado</small></dd></div><div><dt>Sábados</dt><dd>{clinic.saturdayHours}<small>Jornada de mañana</small></dd></div><div><dt>Domingos y festivos</dt><dd>Cerrado<small>Consultar coordinación previa</small></dd></div></dl><p className={styles.hoursNote}>Hora local de Lima. El indicador se calcula según el horario semanal; no contempla festivos ni cierres excepcionales.</p><div className={styles.urgentNote}><Phone size={17} /><p><strong>¿Necesitas atención urgente?</strong><br />Comunícate al <a href={clinic.phoneHref}>{clinic.phone}</a> para consultar disponibilidad.</p></div></div>
+            <div className={styles.hoursCard}><div className={styles.hoursHeader}><Clock3 size={20} /><h3>Horario de atención</h3></div><OpeningStatus /><dl className={styles.hoursTable}><div><dt>Lunes a viernes</dt><dd>{landingDefaults.weekdayHours}<small>Horario continuado</small></dd></div><div><dt>Sábados</dt><dd>{landingDefaults.saturdayHours}<small>Jornada de mañana</small></dd></div><div><dt>Domingos y festivos</dt><dd>Cerrado<small>Consultar coordinación previa</small></dd></div></dl><p className={styles.hoursNote}>Hora local de Lima. El indicador se calcula según el horario semanal; no contempla festivos ni cierres excepcionales.</p><div className={styles.urgentNote}><Phone size={17} /><p><strong>¿Necesitas atención urgente?</strong><br />Comunícate al <a href={clinic.phoneHref}>{clinic.phone}</a> para consultar disponibilidad.</p></div></div>
           </div>
         </section>
 
@@ -94,7 +98,7 @@ export default function HomePage() {
 
         <section className={styles.agenda} id="agenda"><div className={styles.container}><span className={styles.eyebrow}>EL PRIMER PASO ES MÁS SIMPLE DE LO QUE CREES</span><h2>Tu próxima sonrisa<br />comienza aquí.</h2><p>Agenda tu evaluación y conoce un plan de cuidado pensado para ti.<br />Te acompañamos desde el primer diagnóstico.</p><div className={styles.actions}><Link href={booking} className={styles.lightButton}><CalendarDays size={17} /> Agenda tu cita online <ArrowUpRight size={17} /></Link><a href={clinic.phoneHref} className={styles.darkOutlineButton}><Phone size={16} /> Llamar a la clínica</a></div><span className={styles.agendaRegister}>¿Es tu primera visita? <Link href="/register">Crea tu cuenta <ArrowRight size={13} /></Link></span></div></section>
       </main>
-      <footer className={styles.footer}><div className={styles.container}><div className={styles.footerGrid}><div><Link href="/" className={styles.brand} aria-label="Biodentis, inicio"><BrandLogo /><small>ODONTOLOGÍA ESPECIALIZADA</small></Link><p>Precisión clínica, tecnología y un cuidado profundamente humano. Tu salud bucal, en buenas manos.</p></div><div><h3>Explora Biodentis</h3><a href="#especialidades">Nuestras especialidades</a><a href="#servicios">Servicios y precios</a><a href="#primera-visita">Tu primera visita</a><a href="#equipo">Nuestro equipo</a><a href="#contacto">Nuestra clínica</a><a href="#preguntas">Preguntas frecuentes</a></div><div><h3>Tu espacio de paciente</h3><Link href="/login">Iniciar sesión</Link><Link href="/register">Crear una cuenta</Link><Link href={booking}>Agendar una cita</Link><Link href="/forgot-password">Recuperar contraseña</Link></div><div><h3>Estamos cerca</h3><p>{clinic.address}<br />{clinic.location}</p><a href={clinic.phoneHref}>{clinic.phone}</a><a href={`mailto:${clinic.email}`}>{clinic.email}</a><a href={clinic.whatsapp} target="_blank" rel="noopener noreferrer">WhatsApp <ArrowUpRight size={13} /></a></div></div><div className={styles.footerBottom}><span>© {new Date().getFullYear()} BIODENTIS. Todos los derechos reservados.</span><span>ODONTOLOGÍA CON PROPÓSITO.</span><a href="#hero">Volver al inicio ↑</a></div></div></footer>
+      <footer className={styles.footer}><div className={styles.container}><div className={styles.footerGrid}><div><Link href="/" className={styles.brand} aria-label={`${clinic.name}, inicio`}><BrandLogo name={clinic.name} /><small>ODONTOLOGÍA ESPECIALIZADA</small></Link><p>Precisión clínica, tecnología y un cuidado profundamente humano. Tu salud bucal, en buenas manos.</p></div><div><h3>Explora {clinic.name}</h3><a href="#especialidades">Nuestras especialidades</a><a href="#servicios">Servicios y precios</a><a href="#primera-visita">Tu primera visita</a><a href="#equipo">Nuestro equipo</a><a href="#contacto">Nuestra clínica</a><a href="#preguntas">Preguntas frecuentes</a></div><div><h3>Tu espacio de paciente</h3><Link href="/login">Iniciar sesión</Link><Link href="/register">Crear una cuenta</Link><Link href={booking}>Agendar una cita</Link><Link href="/forgot-password">Recuperar contraseña</Link></div><div><h3>Estamos cerca</h3><p>{clinic.name}<br />{clinic.address}</p><a href={clinic.phoneHref}>{clinic.phone}</a><a href={`mailto:${clinic.email}`}>{clinic.email}</a><a href={clinic.whatsapp} target="_blank" rel="noopener noreferrer">WhatsApp <ArrowUpRight size={13} /></a></div></div><div className={styles.footerBottom}><span>© {new Date().getFullYear()} {clinic.name}. Todos los derechos reservados.</span><span>ODONTOLOGÍA CON PROPÓSITO.</span><a href="#hero">Volver al inicio ↑</a></div></div></footer>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema).replace(/</g, "\\u003c") }} />
     </div>
   );

@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
-import { verifyAccessToken, AccessTokenPayload } from "./auth";
 import { AuthenticationError, AuthorizationError } from "./errors";
 import { Role } from "@biodentis/shared-types";
-import { prisma } from "./prisma";
+import { AccessSessionService } from "@/modules/auth/access-session.service";
+
+const sessions = new AccessSessionService();
 
 export function extractTokenFromHeader(request: NextRequest): string {
   const authHeader = request.headers.get("Authorization");
@@ -12,19 +13,15 @@ export function extractTokenFromHeader(request: NextRequest): string {
   return authHeader.slice(7);
 }
 
-export function authenticate(request: NextRequest): AccessTokenPayload {
+export async function authenticate(request: NextRequest) {
   const token = extractTokenFromHeader(request);
-  return verifyAccessToken(token);
+  return sessions.authenticate(token);
 }
 
-export async function requireRole(request: NextRequest, allowedRoles: Role[]): Promise<AccessTokenPayload & { role: Role }> {
-  const payload = authenticate(request);
-  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-  if (!user) {
-    throw new AuthenticationError("Usuario no encontrado");
-  }
-  if (!allowedRoles.includes(user.role as Role)) {
+export async function requireRole(request: NextRequest, allowedRoles: Role[]) {
+  const payload = await authenticate(request);
+  if (!allowedRoles.includes(payload.role)) {
     throw new AuthorizationError("No tienes permisos para acceder a este recurso");
   }
-  return { ...payload, role: user.role as Role };
+  return payload;
 }

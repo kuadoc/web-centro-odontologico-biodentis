@@ -135,8 +135,9 @@ CREATE TABLE "appointments" (
     CONSTRAINT "appointments_pkey" PRIMARY KEY ("id")
 );
 
--- Unique compuesto: (dentistId, date, startTime)
-CREATE UNIQUE INDEX "appointments_dentistId_date_startTime_key" ON "appointments"("dentistId", "date", "startTime");
+-- Las canceladas liberan el turno; las demás conservan la unicidad.
+CREATE UNIQUE INDEX "appointments_active_slot_key" ON "appointments"("dentistId", "date", "startTime") WHERE "status" <> 'CANCELLED';
+CREATE INDEX "appointments_dentistId_date_startTime_idx" ON "appointments"("dentistId", "date", "startTime");
 
 -- FK: appointments.patientId -> users.id
 ALTER TABLE "appointments" ADD CONSTRAINT "appointments_patientId_fkey"

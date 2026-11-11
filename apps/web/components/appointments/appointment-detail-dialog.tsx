@@ -14,7 +14,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@workspace/ui/components/dialog";
-import { formatDate } from "@workspace/ui/lib/utils";
+import { formatCalendarDate, formatTime } from "@workspace/ui/lib/utils";
 import { Phone, Mail, History } from "lucide-react";
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -88,7 +88,7 @@ export function AppointmentDetailDialog({ appointment, appointments, onClose }: 
               </Badge>
             </div>
             <DialogDescription>
-              {formatDate(appointment.date)} · {appointment.startTime} - {appointment.endTime}
+              {formatCalendarDate(appointment.date)} · {formatTime(appointment.startTime)} - {formatTime(appointment.endTime)}
             </DialogDescription>
           </DialogHeader>
 
@@ -127,7 +127,7 @@ export function AppointmentDetailDialog({ appointment, appointments, onClose }: 
                     {appointment.dentist?.specialty ? ` (${appointment.dentist.specialty})` : ""}
                   </Field>
                   <Field label="Fecha y hora">
-                    {formatDate(appointment.date)}, {appointment.startTime} - {appointment.endTime}
+                    {formatCalendarDate(appointment.date)}, {formatTime(appointment.startTime)} - {formatTime(appointment.endTime)}
                   </Field>
                 </div>
                 <div className="space-y-1">
@@ -166,7 +166,7 @@ export function AppointmentDetailDialog({ appointment, appointments, onClose }: 
                   >
                     <div className="min-w-0">
                       <p className="font-medium">
-                        {formatDate(a.date)} · {a.startTime} - {a.endTime}
+                        {formatCalendarDate(a.date)} · {formatTime(a.startTime)} - {formatTime(a.endTime)}
                         {a.id === appointment.id && (
                           <span className="ml-2 text-xs font-normal text-muted-foreground">(esta cita)</span>
                         )}

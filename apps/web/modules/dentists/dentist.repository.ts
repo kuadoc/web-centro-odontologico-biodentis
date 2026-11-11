@@ -34,7 +34,7 @@ export class DentistRepository {
 
   async findAll() {
     return prisma.dentist.findMany({
-      include: { user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } } },
+      include: { user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true, isActive: true, role: true } } },
     });
   }
 

@@ -47,11 +47,11 @@ export default function RegisterPage() {
         <div className={styles.nameFields}>
           <div className={styles.field}>
             <Label htmlFor="firstName">Nombres</Label>
-            <Input id="firstName" name="firstName" autoComplete="given-name" placeholder="Tus nombres" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} disabled={isLoading} required />
+            <Input id="firstName" name="firstName" autoComplete="given-name" placeholder="Ej. María José" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} disabled={isLoading} required />
           </div>
           <div className={styles.field}>
             <Label htmlFor="lastName">Apellidos</Label>
-            <Input id="lastName" name="lastName" autoComplete="family-name" placeholder="Tus apellidos" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} disabled={isLoading} required />
+            <Input id="lastName" name="lastName" autoComplete="family-name" placeholder="Ej. Castillo Rivas" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} disabled={isLoading} required />
           </div>
         </div>
         <div className={styles.field}>
@@ -60,11 +60,11 @@ export default function RegisterPage() {
         </div>
         <div className={styles.field}>
           <Label htmlFor="phone">Teléfono <span className={styles.optional}>(opcional)</span></Label>
-          <Input id="phone" name="phone" type="tel" autoComplete="tel" placeholder="Tu número de contacto" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} disabled={isLoading} />
+          <Input id="phone" name="phone" type="tel" autoComplete="tel" placeholder="Ej. +51 987 654 321" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} disabled={isLoading} />
         </div>
         <div className={styles.field}>
           <Label htmlFor="password">Contraseña</Label>
-          <PasswordInput id="password" name="password" autoComplete="new-password" placeholder="Crea una contraseña" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} minLength={8} aria-describedby="password-hint" disabled={isLoading} required />
+          <PasswordInput id="password" name="password" autoComplete="new-password" placeholder="Crea una contraseña de al menos 8 caracteres" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} minLength={8} aria-describedby="password-hint" disabled={isLoading} required />
           <p id="password-hint" className={styles.hint}>Utiliza al menos 8 caracteres.</p>
         </div>
         <Button type="submit" size="lg" className={styles.submit} isDisabled={isLoading}>

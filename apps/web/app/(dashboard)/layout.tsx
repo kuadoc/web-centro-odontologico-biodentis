@@ -6,20 +6,22 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { canAccessRoute, getDefaultRoute } from "@/lib/route-access";
+import { Button } from "@workspace/ui/components/button";
 
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, sessionError, retrySession } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const patientDashboard = user?.role === "PATIENT" && (pathname === "/dashboard" || pathname.startsWith("/dashboard/"));
+  const hasAccess = canAccessRoute(user?.role, pathname);
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/login");
-    } else if (!isLoading && patientDashboard) {
-      router.replace("/appointments");
+    if (!isLoading && !sessionError && !user) {
+      router.replace("/login");
+    } else if (!isLoading && user && !hasAccess) {
+      router.replace(getDefaultRoute(user.role));
     }
-  }, [user, isLoading, patientDashboard, router]);
+  }, [user, isLoading, sessionError, hasAccess, router]);
 
   if (isLoading) {
     return (
@@ -29,7 +31,16 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user || patientDashboard) return null;
+  if (sessionError && !user) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
+        <p role="alert" className="text-muted-foreground">{sessionError}</p>
+        <Button onPress={retrySession}>Reintentar</Button>
+      </div>
+    );
+  }
+
+  if (!user || !hasAccess) return null;
 
   return (
     // `min-w-0` en la columna de contenido es lo que impide que una tabla ancha

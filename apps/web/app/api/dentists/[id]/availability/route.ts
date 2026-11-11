@@ -32,10 +32,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireRole(request, [Role.ADMIN]);
+    const actor = await requireRole(request, [Role.ADMIN]);
     const { id } = await params;
     const body = await request.json();
-    return Response.json(await availabilityService.replaceWeekly(id, body));
+    return Response.json(await availabilityService.replaceWeekly(id, body, actor.sub));
   } catch (error) {
     return handleApiError(error);
   }

@@ -5,6 +5,8 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+
 }
 
 enum Role {
@@ -20,6 +22,12 @@ enum AppointmentStatus {
   COMPLETED
   NO_SHOW
   CANCELLED
+}
+
+enum CancellationState {
+  REQUESTED
+  APPROVED
+  REJECTED
 }
 
 enum DentalUnitType {
@@ -81,6 +89,7 @@ model User {
   role         Role
   firstName    String
   lastName     String
+  dni          String?  @db.VarChar(8)
   phone          String?
   secondaryPhone String?
   address        String?
@@ -95,6 +104,8 @@ model User {
   treatmentPlans       TreatmentPlan[]  @relation("PatientPlans")
   clinicalRecords      ClinicalRecord[] @relation("PatientRecords")
   appointments         Appointment[]
+  cancellationRequests AppointmentCancellation[] @relation("CancellationRequester")
+  cancellationReviews  AppointmentCancellation[] @relation("CancellationReviewer")
   auditLogs            AuditLog[]
   refreshTokens        RefreshToken[]
   passwordResetTokens  PasswordResetToken[]
@@ -163,6 +174,9 @@ model Appointment {
   endTime   String
   status    AppointmentStatus @default(PENDING)
   notes     String?
+  cancellationReason String?
+  cancelledById      String?
+  cancelledAt        DateTime?
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 
@@ -185,11 +199,37 @@ model Appointment {
   dentalUnit     DentalUnit?      @relation(fields: [dentalUnitId], references: [id])
   treatmentPlan  TreatmentPlan?   @relation(fields: [treatmentPlanId], references: [id])
   clinicalRecord ClinicalRecord?
+  cancellations AppointmentCancellation[]
 
-  @@unique([dentistId, date, startTime])
+  /// La unicidad de citas no canceladas se aplica con el índice parcial SQL de la migración.
+  @@index([dentistId, date, startTime])
   @@index([date, status])
   @@index([date, waitingStatus])
   @@map("appointments")
+}
+
+model AppointmentCancellation {
+  id                  String            @id @default(uuid())
+  appointmentId       String
+  originalStatus      AppointmentStatus
+  state               CancellationState @default(REQUESTED)
+  requestedById       String
+  requestReason       String
+  snapshot            Json
+  reviewedById        String?
+  reviewerSnapshot    Json?
+  reviewReason        String?
+  reviewedAt          DateTime?
+  createdAt           DateTime          @default(now())
+  /// Solo las solicitudes abiertas ocupan esta clave; evita duplicados concurrentes.
+  activeAppointmentId String?           @unique
+  appointment         Appointment @relation(fields: [appointmentId], references: [id])
+  requestedBy         User @relation("CancellationRequester", fields: [requestedById], references: [id])
+  reviewedBy          User? @relation("CancellationReviewer", fields: [reviewedById], references: [id])
+
+  @@index([state, createdAt])
+  @@index([appointmentId, createdAt])
+  @@map("appointment_cancellations")
 }
 
 /// Catalogo de procedimientos: duracion estandar y precio de lista.

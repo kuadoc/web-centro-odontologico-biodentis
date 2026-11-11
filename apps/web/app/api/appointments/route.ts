@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       patientId = body.patientId;
     }
 
-    const appointment = await appointmentService.create(body, patientId, user.role as Role);
+    const appointment = await appointmentService.create(body, patientId, user.role as Role, user.sub);
     return Response.json(appointment, { status: 201 });
   } catch (error) {
     return handleApiError(error);

@@ -8,7 +8,7 @@ const profileService = new ProfileService();
 /** PATCH /api/profile/password — cambia la contraseña y revoca las demás sesiones. */
 export async function PATCH(request: NextRequest) {
   try {
-    const user = authenticate(request);
+    const user = await authenticate(request);
     const body = await request.json();
     const result = await profileService.changePassword(user.sub, body);
     return Response.json(result);

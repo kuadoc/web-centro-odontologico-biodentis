@@ -1,24 +1,16 @@
-import { prisma } from "@/lib/prisma";
+import { AuditRepository } from "./audit.repository";
 
 export class AuditService {
+  constructor(private readonly repository = new AuditRepository()) {}
   async log(userId: string, action: string, resourceType: string, resourceId: string, details?: string) {
-    return prisma.auditLog.create({
-      data: { userId, action, resourceType, resourceId, details },
-    });
+    return this.repository.create(userId, action, resourceType, resourceId, details);
   }
 
   async findByResource(resourceType: string, resourceId: string) {
-    return prisma.auditLog.findMany({
-      where: { resourceType, resourceId },
-      include: { user: { select: { firstName: true, lastName: true, email: true } } },
-      orderBy: { createdAt: "desc" },
-    });
+    return this.repository.findByResource(resourceType, resourceId);
   }
 
   async findByUser(userId: string) {
-    return prisma.auditLog.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-    });
+    return this.repository.findByUser(userId);
   }
 }

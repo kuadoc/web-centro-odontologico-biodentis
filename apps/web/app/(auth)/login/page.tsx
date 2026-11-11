@@ -10,6 +10,7 @@ import { Label } from "@workspace/ui/components/label";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { PasswordInput } from "@/components/auth/password-input";
 import { useAuth } from "@/hooks/use-auth";
+import { canAccessRoute, getDefaultRoute } from "@/lib/route-access";
 import styles from "@/components/auth/auth.module.css";
 
 export default function LoginPage() {
@@ -30,11 +31,9 @@ export default function LoginPage() {
       const signedInUser = await login(email, password);
       const callbackUrl = new URLSearchParams(window.location.search).get("callbackUrl");
       const allowedPath = callbackUrl?.split("?")[0];
-      const isPatient = signedInUser.role === "PATIENT";
-      const allowedPaths = isPatient
-        ? ["/appointments", "/clinical-records", "/profile"]
-        : ["/dashboard", "/appointments", "/clinical-records", "/profile", "/patients", "/dentists", "/users", "/config"];
-      router.push(callbackUrl && allowedPaths.includes(allowedPath ?? "") ? callbackUrl : isPatient ? "/appointments" : "/dashboard");
+      router.push(callbackUrl && canAccessRoute(signedInUser.role, allowedPath ?? "")
+        ? callbackUrl
+        : getDefaultRoute(signedInUser.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al iniciar sesión");
     } finally {
@@ -75,7 +74,7 @@ export default function LoginPage() {
             id="password"
             name="password"
             autoComplete="current-password"
-            placeholder="••••••••"
+            placeholder="Ingresa tu contraseña"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             disabled={isLoading}

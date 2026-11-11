@@ -7,7 +7,7 @@ const dentistService = new DentistService();
 
 export async function GET(request: NextRequest) {
   try {
-    authenticate(request);
+    await authenticate(request);
     const { searchParams } = new URL(request.url);
     const specialty = searchParams.get("specialty");
 

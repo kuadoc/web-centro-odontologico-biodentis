@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isProtectedPath } from "@/lib/route-access";
 
 const REFRESH_COOKIE_NAME = "refresh_token";
 
@@ -10,23 +11,6 @@ const ALLOWED_ORIGINS = [
   "https://biodentis.cl",
   "https://www.biodentis.cl",
 ];
-
-const protectedPaths = [
-  "/dashboard",
-  "/appointments",
-  "/clinical-records",
-  "/config",
-  "/dentists",
-  "/patients",
-  "/users",
-];
-
-const publicPaths = ["/login", "/register", "/api"];
-
-function isProtectedPath(pathname: string): boolean {
-  if (publicPaths.some((p) => pathname.startsWith(p))) return false;
-  return protectedPaths.some((p) => pathname === p || pathname.startsWith(p + "/"));
-}
 
 function setSecurityHeaders(response: NextResponse, origin: string | null): NextResponse {
   response.headers.set("X-Content-Type-Options", "nosniff");

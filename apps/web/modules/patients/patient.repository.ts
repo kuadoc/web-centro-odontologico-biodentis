@@ -21,6 +21,7 @@ const LIST_SELECT = {
   email: true,
   firstName: true,
   lastName: true,
+  dni: true,
   phone: true,
   secondaryPhone: true,
   address: true,
@@ -61,6 +62,7 @@ export class PatientRepository {
         OR: [
           { firstName: { contains: search, mode: "insensitive" } },
           { lastName: { contains: search, mode: "insensitive" } },
+          { dni: { contains: search } },
           { email: { contains: search, mode: "insensitive" } },
           { phone: { contains: search } },
           { patientCode: { contains: search, mode: "insensitive" } },
@@ -169,7 +171,16 @@ export class PatientRepository {
   }
 
   async update(id: string, data: Prisma.UserUpdateInput) {
-    return prisma.user.update({ where: { id }, data, select: LIST_SELECT });
+    return prisma.user.update({
+      where: { id },
+      data: {
+        ...data,
+        ...(data.isActive === false ? {
+          refreshTokens: { updateMany: { where: { revokedAt: null }, data: { revokedAt: new Date() } } },
+        } : {}),
+      },
+      select: LIST_SELECT,
+    });
   }
 
   async findByEmail(email: string) {

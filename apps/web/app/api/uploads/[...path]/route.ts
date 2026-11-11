@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { path } = await params;
     const clave = path.join("/");
     const storage = new StorageService();
-    const actorId = storage.requiereSesion(clave) ? authenticate(request).sub : undefined;
+    const actorId = storage.requiereSesion(clave) ? (await authenticate(request)).sub : undefined;
     const imagen = await storage.leerImagen(clave, actorId);
     const headers = new Headers({
       "Content-Type": "image/webp",

@@ -11,6 +11,7 @@ import { useSidebar } from "@/components/layout/sidebar-context";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useProfile } from "@/hooks/use-queries";
 import { ROLE_LABELS } from "@/lib/role-labels";
+import { canAccessRoute } from "@/lib/route-access";
 import {
   Calendar,
   Users,
@@ -23,24 +24,26 @@ import {
   PanelLeftOpen,
   Settings,
   User,
+  History,
 } from "lucide-react";
 
 const navItems = [
-  { href: "/dashboard", label: "Panel de control", icon: LayoutDashboard, roles: ["ADMIN", "RECEPTIONIST", "DENTIST"] },
-  { href: "/appointments", label: "Citas", icon: Calendar, roles: ["ADMIN", "RECEPTIONIST", "DENTIST", "PATIENT"] },
-  { href: "/patients", label: "Pacientes", icon: Users, roles: ["ADMIN", "RECEPTIONIST", "DENTIST"] },
-  { href: "/dentists", label: "Catálogo", icon: Stethoscope, roles: ["ADMIN"] },
-  { href: "/clinical-records", label: "Historial Clínico", icon: FileText, roles: ["ADMIN", "DENTIST", "PATIENT"] },
-  { href: "/users", label: "Usuarios", icon: Shield, roles: ["ADMIN"] },
-  { href: "/config", label: "Configuración", icon: Settings, roles: ["ADMIN"] },
-  { href: "/profile", label: "Mi Perfil", icon: User, roles: ["ADMIN", "RECEPTIONIST", "DENTIST", "PATIENT"] },
+  { href: "/dashboard", label: "Panel de control", icon: LayoutDashboard },
+  { href: "/appointments", label: "Citas", icon: Calendar },
+  { href: "/patients", label: "Pacientes", icon: Users },
+  { href: "/dentists", label: "Catálogo", icon: Stethoscope },
+  { href: "/clinical-records", label: "Historial Clínico", icon: FileText },
+  { href: "/users", label: "Usuarios", icon: Shield },
+  { href: "/reports/reassignments", label: "Reporte de citas", icon: History },
+  { href: "/config", label: "Configuración", icon: Settings },
+  { href: "/profile", label: "Mi Perfil", icon: User },
 ];
 
 function SidebarNav({ onNavClick, isCollapsed = false }: { onNavClick?: () => void; isCollapsed?: boolean }) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const { data: profile } = useProfile();
-  const filteredNav = navItems.filter((item) => user?.role && item.roles.includes(user.role));
+  const filteredNav = navItems.filter((item) => canAccessRoute(user?.role, item.href));
 
   return (
     <>

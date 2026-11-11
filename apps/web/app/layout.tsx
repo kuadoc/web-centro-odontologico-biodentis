@@ -4,6 +4,7 @@ import type { Metadata } from "next"
 import "@workspace/ui/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { QueryProvider } from "@/components/query-provider"
+import { ToastProvider } from "@/components/ui/toast-provider"
 import { cn } from "@workspace/ui/lib/utils";
 
 const inter = Inter({subsets:['latin'],variable:'--font-sans'})
@@ -30,7 +31,7 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
-          <QueryProvider>{children}</QueryProvider>
+          <QueryProvider><ToastProvider>{children}</ToastProvider></QueryProvider>
         </ThemeProvider>
       </body>
     </html>

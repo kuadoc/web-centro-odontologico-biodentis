@@ -33,6 +33,7 @@ import { usePagination } from "@workspace/ui/hooks/use-pagination"
 import { useAppointments } from "@/hooks/use-queries"
 import { UserAvatar } from "@/components/ui/user-avatar"
 import { parseClinicalNote } from "@/lib/clinical-note-display"
+import { formatCalendarDate, formatTime } from "@workspace/ui/lib/utils"
 
 const normalize = (text: string) =>
   text
@@ -41,15 +42,10 @@ const normalize = (text: string) =>
     .toLowerCase()
 const day = (date: string) => date.slice(0, 10)
 const dateLabel = (date: string, options?: Intl.DateTimeFormatOptions) =>
-  new Intl.DateTimeFormat(
+  options ? new Intl.DateTimeFormat(
     "es-PE",
-    options ?? {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      timeZone: "UTC",
-    }
-  ).format(new Date(`${day(date)}T12:00:00Z`))
+    { ...options, timeZone: "UTC" }
+  ).format(new Date(`${day(date)}T00:00:00Z`)) : formatCalendarDate(date)
 const specialtyLabel = (appointment: Appointment) =>
   appointment.treatment?.specialty?.name ??
   appointment.dentist?.specialty ??
@@ -78,7 +74,7 @@ function printRecord(appointment: Appointment) {
     ["h2", appointment.treatment?.name ?? "Atención odontológica"],
     [
       "p",
-      `${specialtyLabel(appointment)}\nOdontólogo: ${dentistLabel(appointment)}\nAtención del ${dateLabel(appointment.date)} · ${appointment.startTime}`,
+      `${specialtyLabel(appointment)}\nOdontólogo: ${dentistLabel(appointment)}\nAtención del ${dateLabel(appointment.date)} · ${formatTime(appointment.startTime)}`,
     ],
     ["h2", "Registro clínico de la atención"],
     ["p", appointment.clinicalRecord?.notes || "Sin notas registradas."],
@@ -133,7 +129,7 @@ function HistoryCard({
                 <span className="inline-flex items-center gap-1.5">
                   <Calendar className="size-4 shrink-0" aria-hidden="true" />
                   <time dateTime={day(appointment.date)}>
-                    Atención del {dateLabel(appointment.date)}
+                    Atención del {dateLabel(appointment.date)} · {formatTime(appointment.startTime)}
                   </time>
                 </span>
               </div>
@@ -463,7 +459,7 @@ export function PatientClinicalHistory() {
                 })
               : "Por agendar",
             detail: next
-              ? `${next.date.slice(0, 4)} · ${next.startTime} · ${next.status === "PENDING" ? "Pendiente de confirmación" : "Confirmada"}`
+              ? `${next.date.slice(0, 4)} · ${formatTime(next.startTime)} · ${next.status === "PENDING" ? "Pendiente de confirmación" : "Confirmada"}`
               : "Consulta tus citas para coordinar un control",
             icon: Bell,
           },

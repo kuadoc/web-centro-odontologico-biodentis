@@ -1,3 +1,4 @@
+import * as React from "react";
 import { Container, Head, Heading, Html, Preview, Text } from "@react-email/components";
 
 interface AppointmentConfirmationEmailProps {
@@ -6,6 +7,9 @@ interface AppointmentConfirmationEmailProps {
   date: string;
   time: string;
   clinicName: string;
+  serviceName?: string;
+  specialtyName?: string;
+  status?: "PENDING" | "CONFIRMED";
 }
 
 export default function AppointmentConfirmationEmail({
@@ -14,25 +18,35 @@ export default function AppointmentConfirmationEmail({
   date,
   time,
   clinicName,
+  serviceName,
+  specialtyName,
+  status = "CONFIRMED",
 }: AppointmentConfirmationEmailProps) {
+  const confirmed = status === "CONFIRMED";
   return (
     <Html>
       <Head />
-      <Preview>Tu cita ha sido confirmada - BIODENTIS</Preview>
+      <Preview>{confirmed ? "Tu cita ha sido confirmada" : "Tu cita ha sido registrada y está pendiente de confirmación"} - {clinicName}</Preview>
       <Container style={container}>
-        <Heading style={heading}>Cita confirmada</Heading>
+        <Heading style={heading}>{confirmed ? "Cita confirmada" : "Cita registrada"}</Heading>
         <Text style={paragraph}>Hola {patientName},</Text>
-        <Text style={paragraph}>Tu cita odontológica ha sido confirmada exitosamente:</Text>
+        <Text style={paragraph}>{confirmed ? "Tu cita odontológica ha sido confirmada exitosamente:" : "Registramos tu solicitud de cita. Recepción debe confirmar la atención:"}</Text>
         <Container style={detailsBox}>
-          <Text style={detailLabel}>Profesional:</Text>
+          <Text style={detailLabel}>Paciente:</Text>
+          <Text style={detailValue}>{patientName}</Text>
+          <Text style={detailLabel}>Odontólogo que te atenderá:</Text>
           <Text style={detailValue}>{dentistName}</Text>
           <Text style={detailLabel}>Fecha:</Text>
           <Text style={detailValue}>{date}</Text>
           <Text style={detailLabel}>Hora:</Text>
           <Text style={detailValue}>{time}</Text>
+          {serviceName && <React.Fragment><Text style={detailLabel}>Servicio:</Text><Text style={detailValue}>{serviceName}</Text></React.Fragment>}
+          {specialtyName && <React.Fragment><Text style={detailLabel}>Especialidad:</Text><Text style={detailValue}>{specialtyName}</Text></React.Fragment>}
+          <Text style={detailLabel}>Estado:</Text>
+          <Text style={detailValue}>{confirmed ? "Confirmada" : "Pendiente de confirmación"}</Text>
         </Container>
         <Text style={paragraph}>
-          Te esperamos en {clinicName}. Por favor, llega 10 minutos antes de tu hora agendada.
+          {confirmed ? `Te esperamos en ${clinicName}. Por favor, llega 10 minutos antes de tu hora agendada.` : "Recibirás otro correo cuando Recepción confirme tu cita."}
         </Text>
         <Text style={footer}>{clinicName}</Text>
       </Container>
