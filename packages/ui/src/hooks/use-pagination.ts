@@ -10,6 +10,10 @@ export function usePagination<T>(items: T[], initialPageSize = 10, resetKey?: st
   const [state, setState] = useState({ page: 1, pageSize: initialPageSize, key: resetKey })
 
   // Reinicio derivado durante el render: evita un efecto con setState.
+  // Registrar la nueva clave impide recuperar una página vieja al limpiar filtros.
+  if (state.key !== resetKey) {
+    setState({ page: 1, pageSize: state.pageSize, key: resetKey })
+  }
   const page = state.key === resetKey ? state.page : 1
   const pageSize = state.pageSize
 

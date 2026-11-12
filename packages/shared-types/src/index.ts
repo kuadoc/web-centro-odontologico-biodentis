@@ -55,6 +55,7 @@ export interface User {
   role: Role;
   firstName: string;
   lastName: string;
+  dni?: string | null;
   phone: string | null;
   secondaryPhone: string | null;
   avatarUrl: string | null;
@@ -342,6 +343,7 @@ export interface PatientRow {
   email: string;
   firstName: string;
   lastName: string;
+  dni: string | null;
   phone: string | null;
   secondaryPhone: string | null;
   address: string | null;

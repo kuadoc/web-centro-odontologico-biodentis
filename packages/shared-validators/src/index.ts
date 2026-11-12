@@ -21,6 +21,17 @@ export {
   LoginSchema,
   RequestAppointmentSchema,
   RescheduleAppointmentSchema,
+  ReassignAppointmentSchema,
+  ReassignmentReportQuerySchema,
+  CancelAppointmentSchema,
+  RequestAppointmentCancellationSchema,
+  ReviewAppointmentCancellationSchema,
+  CancellationReasonSchema,
+  CancellationActorSchema,
+  CancellationSnapshotSchema,
+  CancellationStateSchema,
+  CancellationReportQuerySchema,
+  ReassignmentAuditDetailSchema,
   AppointmentStatusUpdateSchema,
   CreateClinicalRecordSchema,
   CompleteAppointmentSchema,
@@ -38,6 +49,7 @@ export {
   UpdateSystemSettingSchema,
   BulkUpdateSettingsSchema,
   CreatePatientSchema,
+  PatientDniSchema,
   UpdatePatientSchema,
   DeactivatePatientSchema,
   ForgotPasswordSchema,
@@ -49,6 +61,8 @@ export {
   CreateUserSchema,
   UpdateUserSchema,
 } from "./schemas";
+export type { ReassignmentAuditDetail, ReassignmentReport } from "./schemas";
+export type { CancellationReport, CancellationReportItem } from "./schemas";
 export {
   canCancelOrReschedule,
   isValidTimeRange,

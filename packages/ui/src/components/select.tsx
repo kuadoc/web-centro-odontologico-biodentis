@@ -172,7 +172,7 @@ function SelectList<T extends object>({
   )
 }
 
-function SelectInput({ className, ...props }: SearchFieldProps) {
+function SelectInput({ className, placeholder = "Escribe para buscar...", ...props }: SearchFieldProps & { placeholder?: string }) {
   return (
     <SearchField
       {...props}
@@ -182,6 +182,7 @@ function SelectInput({ className, ...props }: SearchFieldProps) {
     >
       <InputGroup>
         <InputGroupInput
+          placeholder={placeholder}
           data-slot="select-input"
           className="[&::-webkit-search-cancel-button]:hidden"
         />

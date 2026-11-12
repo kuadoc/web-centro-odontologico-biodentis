@@ -35,7 +35,10 @@ export const RequestAppointmentSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
-  notes: z.string().optional(),
+  notes: z.string().trim()
+    .pipe(z.string().min(10, "Escribe al menos 10 caracteres o deja las notas vacías.").or(z.literal("")))
+    .transform((value) => value || undefined)
+    .optional(),
   patientId: z.string().uuid().optional(),
 });
 
@@ -65,6 +68,69 @@ export const RescheduleAppointmentSchema = z.object({
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
 });
 
+export const ReassignAppointmentSchema = z.object({
+  dentistId: z.string().uuid("Selecciona un odontólogo válido"),
+  reason: z.string().trim().min(15, "Describe el motivo con al menos 15 caracteres").max(2000, "Máximo 2000 caracteres"),
+});
+
+export const ReassignmentReportQuerySchema = z.object({
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(100).default(25),
+});
+
+export const CancellationReasonSchema = z.string().trim()
+  .min(25, "Describe el motivo con al menos 25 caracteres")
+  .max(2000, "Máximo 2000 caracteres");
+export const CancelAppointmentSchema = z.object({ reason: CancellationReasonSchema });
+export const RequestAppointmentCancellationSchema = CancelAppointmentSchema;
+export const ReviewAppointmentCancellationSchema = z.object({
+  decision: z.enum(["APPROVE", "REJECT"]),
+  reason: CancellationReasonSchema,
+});
+export const CancellationStateSchema = z.enum(["REQUESTED", "APPROVED", "REJECTED"]);
+export const CancellationReportQuerySchema = ReassignmentReportQuerySchema.extend({ state: CancellationStateSchema.optional() });
+export const CancellationActorSchema = z.object({ id: z.string().uuid(), name: z.string(), role: RoleSchema });
+export const CancellationSnapshotSchema = z.object({
+  appointmentId: z.string().uuid(),
+  patient: z.object({ id: z.string().uuid(), name: z.string() }),
+  dentist: z.object({ id: z.string().uuid(), name: z.string() }),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  startTime: z.string(), endTime: z.string(),
+  requestedBy: CancellationActorSchema,
+});
+export type CancellationReportItem = z.infer<typeof CancellationSnapshotSchema> & {
+  id: string; state: z.infer<typeof CancellationStateSchema>; originalStatus: "PENDING" | "CONFIRMED";
+  currentStatus: string; requestReason: string; reviewReason: string | null;
+  reviewedBy: z.infer<typeof CancellationActorSchema> | null;
+  createdAt: string; reviewedAt: string | null;
+};
+export type CancellationReport = {
+  items: CancellationReportItem[]; total: number; page: number; pageSize: number;
+  summary: { requested: number; approved: number; rejected: number; reassignments: number };
+  activity: Array<{ month: string; requests: number; cancellations: number; reassignments: number }>;
+};
+
+export const ReassignmentAuditDetailSchema = z.object({
+  appointmentId: z.string().uuid(),
+  patient: z.object({ id: z.string().uuid(), name: z.string() }),
+  previousDentist: z.object({ id: z.string().uuid(), name: z.string() }),
+  newDentist: z.object({ id: z.string().uuid(), name: z.string() }),
+  actor: z.object({ id: z.string().uuid(), name: z.string(), role: RoleSchema }),
+  status: AppointmentStatusSchema.extract(["PENDING", "CONFIRMED"]),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  reason: z.string().trim().min(15).max(2000),
+});
+
+export type ReassignmentAuditDetail = z.infer<typeof ReassignmentAuditDetailSchema>;
+export type ReassignmentReport = {
+  items: Array<ReassignmentAuditDetail & { id: string; createdAt: string }>;
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 export const AppointmentStatusUpdateSchema = z.object({
   status: AppointmentStatusSchema.refine((val) => ["COMPLETED", "NO_SHOW"].includes(val), {
     message: "Solo se puede cambiar a COMPLETED o NO_SHOW",
@@ -84,10 +150,10 @@ export const CompleteAppointmentSchema = z.object({
 });
 
 export const ConfigureAvailabilitySchema = z.object({
-  dayOfWeek: z.number().min(0).max(6),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
-});
+  dayOfWeek: z.number().int("El día debe ser un número entero").min(0).max(6),
+  startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "Hora de inicio inválida"),
+  endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "Hora de fin inválida"),
+}).refine((day) => day.startTime < day.endTime, "La hora de fin debe ser posterior al inicio");
 
 export const ReplaceWeeklyAvailabilitySchema = z.object({
   days: z
@@ -102,9 +168,15 @@ export const UpdateClinicSchema = z.object({
   address: z.string().optional(),
   phone: z.string().optional(),
   generalHours: z.string().optional(),
-  email: z.string().email().optional(),
+  email: z.string().trim().pipe(z.union([
+    z.string().email("Ingresa un correo electrónico válido."),
+    z.literal(""),
+  ])).optional(),
   rut: z.string().optional(),
-  website: z.string().url().optional(),
+  website: z.string().trim().pipe(z.union([
+    z.string().url("Ingresa una URL válida para el sitio web, por ejemplo https://biodentis.com."),
+    z.literal(""),
+  ])).optional(),
   logoUrl: z.string().url().optional(),
 });
 
@@ -191,16 +263,24 @@ export const UpdateScheduleExceptionSchema = z.object({
   status: ExceptionStatusSchema.optional(),
 });
 
+export const PatientDniSchema = z.string().trim()
+  .regex(/^(?:\d{8})?$/, "El DNI debe contener exactamente 8 dígitos")
+  .transform((value) => value || null)
+  .nullable()
+  .optional();
+
 export const CreatePatientSchema = z.object({
   email: z.string().email("Email inválido"),
   password: z.string().min(8, "Mínimo 8 caracteres"),
   firstName: z.string().min(1, "Nombre requerido"),
   lastName: z.string().min(1, "Apellido requerido"),
+  dni: PatientDniSchema,
   phone: z.string().optional(),
   address: z.string().optional(),
 });
 
 export const UpdatePatientSchema = z.object({
+  dni: PatientDniSchema,
   firstName: z.string().min(1, "Nombre requerido").optional(),
   lastName: z.string().min(1, "Apellido requerido").optional(),
   email: z.string().email("Email inválido").optional(),
