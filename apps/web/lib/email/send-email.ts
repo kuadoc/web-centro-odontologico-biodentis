@@ -1,6 +1,7 @@
 import React from "react";
-import { resend } from "./resend-client";
+import { getResend } from "./resend-client";
 import { prisma } from "@/lib/prisma";
+import { canSendEmail } from "./email-policy";
 
 export type EmailType =
   | "password_reset"
@@ -32,6 +33,10 @@ async function logEmailAttempt(data: {
 }
 
 export async function sendEmail(params: SendEmailParams): Promise<boolean> {
+  if (!canSendEmail(params.to)) {
+    console.info("[EMAIL_SKIPPED]", { type: params.type, reason: "delivery_policy" });
+    return false;
+  }
   const from = process.env.EMAIL_FROM;
 
   if (!from) {
@@ -40,6 +45,11 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
   }
 
   try {
+    const resend = getResend();
+    if (!resend) {
+      console.error("[EMAIL] RESEND_API_KEY no está configurada");
+      return false;
+    }
     const { error } = await resend.emails.send({
       from,
       to: params.to,

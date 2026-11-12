@@ -12,20 +12,29 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState("Si la cuenta es elegible y el envío está disponible, recibirás instrucciones para restablecer tu contraseña.");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      await fetch("/api/auth/forgot-password", {
+      const response = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
 
+      const data: unknown = await response.json();
+      if (response.ok && typeof data === "object" && data !== null && "message" in data && typeof data.message === "string") {
+        setMessage(data.message);
+      } else {
+        setMessage("No se pudo procesar la solicitud. Inténtalo nuevamente más tarde.");
+      }
+
       setSubmitted(true);
     } catch {
+      setMessage("No se pudo procesar la solicitud. Inténtalo nuevamente más tarde.");
       setSubmitted(true);
     } finally {
       setIsLoading(false);
@@ -38,14 +47,14 @@ export default function ForgotPasswordPage() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold"><Link href="/" aria-label="Biodentis, inicio"><BrandLogo /></Link></CardTitle>
-            <CardDescription>Correo enviado</CardDescription>
+            <CardDescription>Solicitud de recuperación</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-md bg-primary/10 p-3 text-sm text-primary">
-              Si el email está registrado, recibirás instrucciones para restablecer tu contraseña.
+              {message}
             </div>
             <p className="text-sm text-muted-foreground text-center">
-              Revisa tu bandeja de entrada y sigue las instrucciones del correo.
+              Si recibes un correo, sigue sus instrucciones para continuar.
             </p>
           </CardContent>
           <CardFooter className="flex justify-center">
