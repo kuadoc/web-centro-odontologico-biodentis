@@ -6,6 +6,7 @@ import { handleApiError } from "@/lib/errors";
 import { RateLimiter } from "@/lib/rate-limit";
 import { hashToken } from "@/lib/auth";
 import { sendPasswordResetEmail } from "@/lib/email/send-emails";
+import { canSendEmail } from "@/lib/email/email-policy";
 
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 const resetLimiter = new RateLimiter(3, FIFTEEN_MINUTES_MS);
@@ -25,6 +26,10 @@ export async function POST(request: NextRequest) {
 
     const { email } = parsed.data;
     const normalizedEmail = email.toLowerCase();
+
+    if (!canSendEmail(normalizedEmail)) {
+      return NextResponse.json({ message: "La recuperación por correo está temporalmente limitada a la cuenta de pruebas autorizada." }, { status: 200 });
+    }
 
     const rateLimitKey = `reset:${normalizedEmail}`;
     if (resetLimiter.isBlocked(rateLimitKey)) {
@@ -59,7 +64,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    sendPasswordResetEmail(user.email, user.firstName, rawToken).catch((error) => {
+    await sendPasswordResetEmail(user.email, user.firstName, rawToken).catch((error) => {
       console.error("[FORGOT_PASSWORD_EMAIL_FAILED]", { email: normalizedEmail, error });
     });
 
