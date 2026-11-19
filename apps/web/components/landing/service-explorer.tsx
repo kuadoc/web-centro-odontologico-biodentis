@@ -8,16 +8,25 @@ import {
   Layers3, MessageCircle, Microscope, Ruler, ScanLine, Search, ShieldCheck,
   Smile, Sparkles, X,
 } from "lucide-react";
-import { clinic, specialties } from "@/lib/landing-content";
+import type { LucideIcon } from "lucide-react";
+import { clinic } from "@/lib/landing-content";
 import styles from "./landing.module.css";
 
-const icons = {
-  tooth: Smile, ruler: Ruler, healing: Microscope, medical: Cross,
-  shield: ShieldCheck, child: HeartHandshake, scan: ScanLine,
-  sparkles: Sparkles, layers: Layers3,
-};
-
 const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+const iconBySpecialty: Array<[RegExp, LucideIcon]> = [
+  [/ortodoncia/, Ruler],
+  [/endodoncia/, Microscope],
+  [/cirugia|maxilofacial/, Cross],
+  [/periodoncia/, ShieldCheck],
+  [/odontopediatria|infantil/, HeartHandshake],
+  [/radiologia|diagnostico/, ScanLine],
+  [/estetica/, Sparkles],
+  [/protesis|rehabilitacion|implante/, Layers3],
+];
+
+const iconForSpecialty = (name: string): LucideIcon =>
+  iconBySpecialty.find(([pattern]) => pattern.test(normalize(name)))?.[1] ?? Smile;
 
 export function ServiceExplorer() {
   const [specialty, setSpecialty] = useState("");
@@ -36,10 +45,17 @@ export function ServiceExplorer() {
   });
 
   const allServices = data?.services ?? [];
-  const specialtyNames = [...new Set([
-    ...specialties.map((item) => item.name),
-    ...allServices.map((item) => item.specialty),
-  ])];
+  const specialtyCards = [...allServices.reduce((groups, item) => {
+    const services = groups.get(item.specialty) ?? [];
+    services.push(item);
+    groups.set(item.specialty, services);
+    return groups;
+  }, new Map<string, typeof allServices>())].map(([name, services]) => ({
+    name,
+    icon: iconForSpecialty(name),
+    category: services.length === 1 ? "1 servicio" : `${services.length} servicios`,
+  })).sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const specialtyNames = specialtyCards.map((item) => item.name);
   const term = normalize(search.trim());
   const visible = allServices.filter((item) =>
     (!specialty || item.specialty === specialty)
@@ -69,18 +85,19 @@ export function ServiceExplorer() {
           <div><span className={styles.eyebrow}>01 / NUESTRAS ESPECIALIDADES</span><h2 id="specialties-title">Diferentes especialidades.<br />Un mismo cuidado por ti.</h2></div>
           <p>Cada sonrisa necesita una atención distinta. Explora nuestras áreas y descubre los servicios de cada especialidad.</p>
         </div>
-        <div className={styles.specialtiesGrid}>
-          {specialties.map((item, index) => {
-            const Icon = icons[item.icon];
-            return <button key={item.name} type="button" className={styles.specialtyCard}
-              aria-label={`Ver servicios de ${item.name}`} aria-pressed={specialty === item.name}
-              onClick={() => selectSpecialty(item.name)}>
-              <span className={styles.specialtyCardTop}><span className={styles.iconBox}><Icon size={22} strokeWidth={1.5} /></span><span className={styles.specialtyNumber}>{String(index + 1).padStart(2, "0")}</span></span>
-              <strong>{item.name}</strong><span className={styles.specialtyCategory}>{item.category}</span>
-              <span className={styles.specialtyAction}>Explorar servicios <ArrowDown size={14} /></span>
-            </button>;
-          })}
-        </div>
+        {isPending ? <div className={styles.catalogLoading} aria-busy="true"><span className={styles.loadingDot} />Cargando especialidades…</div>
+          : <div className={styles.specialtiesGrid}>
+            {specialtyCards.map((item, index) => {
+              const Icon = item.icon;
+              return <button key={item.name} type="button" className={styles.specialtyCard}
+                aria-label={`Ver servicios de ${item.name}`} aria-pressed={specialty === item.name}
+                onClick={() => selectSpecialty(item.name)}>
+                <span className={styles.specialtyCardTop}><span className={styles.iconBox}><Icon size={22} strokeWidth={1.5} /></span><span className={styles.specialtyNumber}>{String(index + 1).padStart(2, "0")}</span></span>
+                <strong>{item.name}</strong><span className={styles.specialtyCategory}>{item.category}</span>
+                <span className={styles.specialtyAction}>Explorar servicios <ArrowDown size={14} /></span>
+              </button>;
+            })}
+          </div>}
       </div>
     </section>
 
@@ -111,8 +128,7 @@ export function ServiceExplorer() {
           : visible.length === 0 ? <div className={styles.catalogEmpty}><Search size={30} strokeWidth={1.3} /><h3>{allServices.length === 0 ? "No hay servicios disponibles por el momento" : specialty && !search ? "Hablemos de tu atención." : "No encontramos coincidencias."}</h3><p>{specialty && !search ? `Consulta con recepción los servicios y precios de ${specialty}. Te ayudamos a encontrar la atención que necesitas.` : "Prueba otra búsqueda o escríbenos para recibir orientación."}</p><div className={styles.actions}>{(specialty || search) && <button type="button" className={styles.secondaryButton} onClick={clearFilters}>Ver todos los servicios</button>}<a className={styles.primaryButton} href={clinic.whatsapp} target="_blank" rel="noopener noreferrer">Consultar precio <ArrowUpRight size={15} /></a></div></div>
           : <div className={styles.catalogGrid}>
             {visible.map((item) => {
-              const details = specialties.find((entry) => entry.name === item.specialty);
-              const Icon = details ? icons[details.icon] : Smile;
+              const Icon = iconForSpecialty(item.specialty);
               const consultation = `${clinic.whatsapp}?text=${encodeURIComponent(`Hola, BIODENTIS. Quisiera información y disponibilidad para ${item.name}.`)}`;
               return <article key={item.id} className={styles.catalogCard} data-service-id={item.id}>
                 <div className={styles.catalogCardHeader}><span className={styles.iconBox}><Icon size={21} strokeWidth={1.5} /></span><span className={styles.pill}>{item.category}</span></div>

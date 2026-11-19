@@ -23,7 +23,7 @@ web-centro-odontologico-biodentis/
 │   └── config/               ← Configuracion compartida (tsconfig, eslint, prettier)
 │
 ├── docker-compose.yml        ← PostgreSQL + Backend + Frontend
-└── turbo.json                ← Configuracion de Turborepo
+└── turbo.json                ← Configuracion de Turborepo.
 ```
 
 ## Instalacion
