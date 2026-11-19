@@ -109,8 +109,8 @@ export function ServiceExplorer() {
         </div>
 
         <div className={styles.catalogToolbar}>
-          <label className={styles.catalogSearch}><Search size={18} aria-hidden="true" /><span className="sr-only">Buscar servicios</span><input type="search" placeholder={specialty ? `Buscar servicios de ${specialty}` : "Ej. evaluación o limpieza dental"} value={search} onChange={(event) => setSearch(event.target.value)} />{search && <button type="button" aria-label="Limpiar búsqueda" onClick={() => setSearch("")}><X size={16} /></button>}</label>
-          <label className={styles.catalogSort}><span>Ordenar por</span><select aria-label="Ordenar servicios" value={sort} onChange={(event) => setSort(event.target.value)}><option value="name">Nombre del servicio</option><option value="price">Menor precio</option></select></label>
+          <div className={styles.catalogSearch}><Search size={18} aria-hidden="true" /><label htmlFor="catalog-search" className="sr-only">Buscar servicios</label><input id="catalog-search" type="search" placeholder={specialty ? `Buscar servicios de ${specialty}` : "Ej. evaluación o limpieza dental"} value={search} onChange={(event) => setSearch(event.target.value)} />{search && <button type="button" aria-label="Limpiar búsqueda" onClick={() => setSearch("")}><X size={16} /></button>}</div>
+          <div className={styles.catalogSort}><label htmlFor="catalog-sort">Ordenar por</label><select id="catalog-sort" value={sort} onChange={(event) => setSort(event.target.value)}><option value="name">Nombre del servicio</option><option value="price">Menor precio</option></select></div>
         </div>
 
         <div className={styles.catalogFilters} role="group" aria-label="Filtrar servicios por especialidad">

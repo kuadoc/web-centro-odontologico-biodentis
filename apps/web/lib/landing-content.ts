@@ -7,10 +7,10 @@ export const clinic = {
   name: "BIODENTIS",
   ...clinicLocation,
   phone: clinicContact.displayPhone,
+  email: "contacto@biodentis.cl",
   internationalPhone: clinicContact.internationalPhone,
   phoneHref: clinicContact.phoneHref,
   whatsapp: clinicContact.whatsapp,
-  email: "contacto@biodentis.cl",
   weekdayHours: "08:00 – 18:00",
   saturdayHours: "09:00 – 14:00",
 } as const;
