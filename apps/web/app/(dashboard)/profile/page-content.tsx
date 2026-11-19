@@ -282,6 +282,20 @@ export default function ProfilePage() {
                     <Info className="h-3 w-3" /> Contacta al administrador para modificar el correo institucional.
                   </p>
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="dni" className="text-xs font-semibold flex justify-between">
+                    <span>DNI</span>
+                    <span className="font-normal text-muted-foreground">Solo lectura</span>
+                  </Label>
+                  <div className="relative">
+                    <BadgeCheck className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input id="dni" type="text" className="pl-8 pr-8 bg-muted" disabled value={user.dni ?? NOT_SET} />
+                    <Lock className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Info className="h-3 w-3" /> El DNI no se puede modificar. Contacta al administrador si necesitas corregirlo.
+                  </p>
+                </div>
 
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="alt-phone" className="text-xs font-semibold">
