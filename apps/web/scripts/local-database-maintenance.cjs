@@ -8,8 +8,9 @@ const { resolve } = require("node:path");
 const { PrismaClient } = require("@prisma/client");
 
 const url = new URL(process.env.DATABASE_URL || "http://invalid");
-if (!["localhost", "127.0.0.1"].includes(url.hostname) || url.port !== "5432" || url.pathname !== "/biodentis") {
-  throw new Error("Solo se admite biodentis en localhost:5432.");
+const localTestAction = process.argv[2] === "test" && url.pathname === "/postgres";
+if (!["localhost", "127.0.0.1"].includes(url.hostname) || url.port !== "5432" || (url.pathname !== "/biodentis" && !localTestAction)) {
+  throw new Error("Las operaciones históricas requieren biodentis local; test admite también postgres en localhost:5432.");
 }
 const container = "next-monorepo-postgres-1";
 const user = decodeURIComponent(url.username);
