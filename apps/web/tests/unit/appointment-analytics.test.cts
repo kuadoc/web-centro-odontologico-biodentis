@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { test } from "node:test";
+import { beforeEach, test } from "node:test";
 import ExcelJS from "exceljs";
 import { Role } from "@biodentis/shared-types";
 import { AppointmentReportRepository } from "@/modules/reports/appointment-report.repository";
@@ -10,6 +10,16 @@ import { AuditService } from "@/modules/audit/audit.service";
 import { AuthorizationError, ValidationError } from "@/lib/errors";
 
 const now = new Date("2026-11-19T17:00:00Z");
+// Las métricas de entrega se prueban con política live explícita; CI usa test
+// por seguridad. Este archivo solo lee datos simulados y no envía correos.
+beforeEach((context) => {
+  const previous = process.env.EMAIL_MODE;
+  process.env.EMAIL_MODE = "live";
+  context.after(() => {
+    if (previous === undefined) delete process.env.EMAIL_MODE;
+    else process.env.EMAIL_MODE = previous;
+  });
+});
 const patientId = randomUUID(); const dentistId = randomUUID(); const otherDentist = randomUUID();
 function appointment(status: "COMPLETED" | "CONFIRMED" | "PENDING" | "NO_SHOW" | "CANCELLED", date: string, who = patientId, dentist = dentistId) {
   return { id: randomUUID(), patientId: who, dentistId: dentist, date: new Date(date), startTime: "10:00", endTime: "10:30", status,
@@ -65,6 +75,19 @@ test("recordatorios: aceptación, supresión y reintentos son estados distintos"
   assert.equal((await service.report({}, actor, now)).upcoming[0]!.reminder.state, "RETRY");
   row.emailOutbox[0]!.attempts = 10;
   assert.equal((await service.report({}, actor, now)).upcoming[0]!.reminder.state, "FAILED");
+});
+
+test("recordatorios: modo test muestra supresión para un destinatario no autorizado", async (context) => {
+  process.env.EMAIL_MODE = "test";
+  const previous = process.env.EMAIL_TEST_RECIPIENT;
+  process.env.EMAIL_TEST_RECIPIENT = "authorized@example.test";
+  context.after(() => {
+    if (previous === undefined) delete process.env.EMAIL_TEST_RECIPIENT;
+    else process.env.EMAIL_TEST_RECIPIENT = previous;
+  });
+  context.mock.method(AppointmentReportRepository.prototype, "data", async () => fixture());
+  const report = await new AppointmentReportService().report({}, { id: patientId, role: Role.ADMIN }, now);
+  assert.equal(report.upcoming[0]!.reminder.state, "SUPPRESSED");
 });
 test("Excel incluye todas las filas, rankings completos y alcance propio del paciente", async (context) => {
   const source = fixture(); source.appointments = Array.from({ length: 127 }, () => appointment("COMPLETED", "2026-11-18"));
