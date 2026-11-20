@@ -79,8 +79,9 @@ Preview debe usar una base de pruebas y correo de prueba con destinatario autori
 | 2 | `20261118010000_contact_and_confirmation` | Contactos, notas y confirmaciones |
 | 3 | `20261119000000_atomic_patient_codes` | Secuencia de códigos inicializada con el máximo existente |
 | 4 | `20261119010000_reports_and_reminders` | Resultado de outbox y ejecuciones de recordatorios |
+| 5 | `20261120000000_protect_operational_tables` | RLS, revocación de permisos públicos y nombre de índice alineado con Prisma |
 
-La migración inicial publicada no se modifica. Ninguna de las cuatro carga datos
+La migración inicial publicada no se modifica. Ninguna de las cinco carga datos
 del seed ni elimina registros de pacientes. Las restricciones pueden detener la
 aplicación si hay datos incompatibles; el preflight no los corrige automáticamente.
 
@@ -103,5 +104,29 @@ La duración del trabajador, Storage y SMTP debe validarse contra el plan real d
 - 92 pruebas de autenticación, correo simulado, reportes, Storage y cron aprobadas.
 - `/api/cron/reminders` reutiliza la autorización y el trabajador persistente nuevo.
 - CI restaurado para `develop` y PR a `master`, sin migraciones automáticas.
-- Conexión productiva, respaldo, ensayo, programador y publicación: pendientes de acceso
-  y verificación; no están acreditados por las pruebas locales.
+- Conexión productiva, respaldo del esquema público y ensayo: verificados en el
+  apartado siguiente. Variables de Vercel, programador y publicación: pendientes.
+
+## Lectura productiva y ensayo del 20 de noviembre de 2026
+
+La revisión en Session Pooler confirmó PostgreSQL 17.11, la migración inicial
+reconocida, checksums sin conflictos y ausencia de incidencias en el preflight.
+Las 21 tablas públicas existentes tenían RLS activado y ninguna política; el rol
+servidor usado por Prisma tiene bypass de RLS. Las cuatro migraciones funcionales
+nuevas seguían pendientes. No se aplicaron cambios en producción.
+
+Se creó un respaldo consistente del esquema público de la aplicación mediante
+snapshot de solo lectura. El archivo privado está en `.backups/`, excluido de Git;
+no incluye los esquemas administrados de Supabase ni los objetos de Storage.
+La restauración en PostgreSQL 17 temporal coincidió en conteos y checksums de
+todas las tablas, y las migraciones funcionales conservaron los registros existentes.
+
+El ensayo detectó que las tablas operativas nuevas no activaban RLS, a diferencia
+de la estructura productiva actual. Se añade una quinta migración para protegerlas
+y revocar acceso a `anon`, `authenticated` y `PUBLIC`, sin modificar registros.
+El ensayo confirmó RLS en las tres tablas nuevas, ausencia de concesiones de API
+y rechazo de lectura por `anon` y `authenticated`, incluso simulando permisos
+predeterminados amplios en la copia. Los registros existentes siguieron idénticos.
+El resultado se registra de forma privada junto al respaldo. La publicación,
+activación del programador y revisión de variables de
+Vercel permanecen pendientes.
