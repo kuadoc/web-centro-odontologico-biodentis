@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { Role } from "@biodentis/shared-types";
 import { AppointmentService } from "@/modules/appointments/appointment.service";
 import { AppointmentRepository } from "@/modules/appointments/appointment.repository";
-import { AppointmentNotificationService } from "@/modules/appointments/appointment-notification.service";
+import { EmailOutboxService } from "@/modules/appointments/email-outbox.service";
 import { AvailabilityService } from "@/modules/availability/availability.service";
 import { CatalogAdminService } from "@/modules/service-catalog/catalog-admin.service";
 import { AuthorizationError, DomainError, ScheduleConflictError, ValidationError } from "@/lib/errors";
@@ -16,7 +16,7 @@ const TREATMENT = "44444444-4444-4444-8444-444444444444";
 const ACTOR = "55555555-5555-4555-8555-555555555555";
 const input = {
   patientId: SELECTED_PATIENT, dentistId: DENTIST, treatmentId: TREATMENT,
-  date: "2030-01-07", startTime: "09:00", endTime: "09:30", notes: "  Dolor en una muela  ",
+  reason: "Dolor dental", hasPain: true, problemDuration: "Una semana", date: "2030-01-07", startTime: "09:00", endTime: "09:30", notes: "  Dolor en una muela  ",
 };
 
 function setup(context: TestContext) {
@@ -38,7 +38,7 @@ function setup(context: TestContext) {
     events.push("create");
     return { id: "created-appointment", ...(data as Record<string, unknown>) };
   });
-  const notice = context.mock.method(AppointmentNotificationService.prototype, "sendBookingNotice", async () => {
+  const notice = context.mock.method(EmailOutboxService.prototype, "tryDeliver", async () => {
     events.push("notice");
     return true;
   });
@@ -52,7 +52,7 @@ for (const role of [Role.PATIENT, Role.RECEPTIONIST, Role.ADMIN, undefined]) {
     const saved = {
       patientId: role === Role.ADMIN || role === Role.RECEPTIONIST ? SELECTED_PATIENT : PATIENT,
       dentistId: DENTIST, date: new Date(input.date), startTime: "09:00", endTime: "09:45",
-      notes: "Dolor en una muela", treatmentId: TREATMENT,
+      notes: role === Role.PATIENT ? "Motivo: Dolor dental\nDolor: Sí\nTiempo del problema: Una semana\nNotas: Dolor en una muela" : "Dolor en una muela", treatmentId: TREATMENT,
       status: role === Role.RECEPTIONIST ? "CONFIRMED" : "PENDING",
     };
     assert.deepEqual(create.mock.calls[0]?.arguments, [saved, role === Role.RECEPTIONIST ? ACTOR : undefined]);

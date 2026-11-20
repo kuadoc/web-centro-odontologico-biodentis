@@ -10,15 +10,12 @@ import { Label } from "@workspace/ui/components/label";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { PasswordInput } from "@/components/auth/password-input";
 import { useAuth } from "@/hooks/use-auth";
+import { normalizeRegistrationPhone } from "@/lib/registration-form";
 import styles from "@/components/auth/auth.module.css";
 
 // Deja solo letras (con tildes, ñ y ü) y espacios.
 const onlyLetters = (value: string) =>
   value.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]/g, "");
-
-// Deja solo dígitos y corta a un máximo de 9.
-const onlyPhoneDigits = (value: string) =>
-  value.replace(/\D/g, "").slice(0, 9);
 
 // Deja solo dígitos y corta a un máximo de 8 (largo del DNI peruano).
 const onlyDniDigits = (value: string) =>
@@ -76,7 +73,7 @@ export default function RegisterPage() {
         </div>
         <div className={styles.field}>
           <Label htmlFor="phone">Teléfono <span className={styles.optional}>(opcional)</span></Label>
-          <Input id="phone" name="phone" type="tel" inputMode="numeric" maxLength={9} autoComplete="tel" placeholder="Ej. 987654321" value={form.phone} onChange={(event) => setForm({ ...form, phone: onlyPhoneDigits(event.target.value) })} disabled={isLoading} />
+          <Input id="phone" name="phone" type="tel" inputMode="numeric" pattern="[0-9]{9}" title="Ingresa un teléfono de 9 dígitos; puedes pegarlo con el prefijo +51" autoComplete="tel" placeholder="Ej. 987654321" value={form.phone} onChange={(event) => setForm({ ...form, phone: normalizeRegistrationPhone(event.target.value) })} disabled={isLoading} />
         </div>
         <div className={styles.field}>
           <Label htmlFor="password">Contraseña</Label>

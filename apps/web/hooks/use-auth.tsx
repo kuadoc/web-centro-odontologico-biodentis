@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from "react";
 import { Role } from "@biodentis/shared-types";
+import type { z } from "zod";
+import type { RegisterSchema } from "@biodentis/shared-validators";
 import { useQueryClient } from "@tanstack/react-query";
 import { authenticatedFetch, getAccessToken, logoutSession, saveAccessToken, SessionExpiredError, SESSION_TOKEN_EVENT } from "@/lib/client-session";
 
@@ -27,14 +29,7 @@ interface AuthContextType extends AuthState {
   retrySession: () => void;
 }
 
-interface RegisterData {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  phone?: string;
-  role?: Role;
-}
+type RegisterData = z.infer<typeof RegisterSchema>;
 
 const AuthContext = createContext<AuthContextType | null>(null);
 

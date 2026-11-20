@@ -3,6 +3,8 @@ import { NotFoundError, DomainError, ValidationError } from "@/lib/errors";
 import { Role } from "@biodentis/shared-types";
 import bcrypt from "bcrypt";
 import { CreateUserSchema, UpdateUserSchema } from "@biodentis/shared-validators";
+import { randomUUID } from "node:crypto";
+import { StorageService } from "@/modules/storage/storage.service";
 
 export class UserService {
   constructor(private readonly userRepository = new UserRepository()) {}
@@ -49,7 +51,9 @@ export class UserService {
 
     const passwordHash = await bcrypt.hash(data.password, 10);
 
-    const user = await this.userRepository.create({
+    const userId = randomUUID();
+    const user = await new StorageService().conFotoPerfil(data.avatarUrl, userId, data.role === "DENTIST", (avatarUrl) => this.userRepository.create({
+      id: userId,
       email: data.email,
       passwordHash,
       role: data.role as Role,
@@ -57,13 +61,13 @@ export class UserService {
       lastName: data.lastName,
       phone: data.phone,
       address: data.address,
-      avatarUrl: data.avatarUrl,
+      avatarUrl,
       ...(data.role === "DENTIST" ? { dentistProfile: {
         specialty: data.specialty ?? "General",
         licenseNumber: data.licenseNumber,
         university: data.university,
       } } : {}),
-    });
+    }));
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash: _, ...rest } = user;
@@ -77,10 +81,14 @@ export class UserService {
       if (!user) throw new NotFoundError("Usuario no encontrado");
       if (data.isActive === false) {
         const { pending, confirmed } = await repository.countBlockingAppointments(userId);
-        if (pending || confirmed) {
+        if (confirmed) {
           throw new DomainError(
             `No se puede desactivar al odontólogo: tiene ${pending} citas pendientes y ${confirmed} confirmadas. Coordina con Recepción la reasignación de las pendientes y con Administración las citas confirmadas.`, 409,
           );
+        }
+        if (pending) {
+          if (!actorId) throw new ValidationError("Se requiere identificar al administrador responsable.");
+          await repository.cancelPendingForDentist(userId, actorId);
         }
       }
       const result = await repository.update(userId, {
@@ -97,6 +105,15 @@ export class UserService {
       const { passwordHash, ...safeUser } = result;
       return safeUser;
     };
-    return data.isActive === undefined ? apply(this.userRepository) : this.userRepository.withTransaction(apply);
+    if (data.avatarUrl === undefined) return data.isActive === undefined ? apply(this.userRepository) : this.userRepository.withTransaction(apply);
+    const requestedAvatar = data.avatarUrl;
+    return this.userRepository.withLockedAvatar(userId, async (repository) => {
+      const user = await repository.findById(userId);
+      if (!user) throw new NotFoundError("Usuario no encontrado");
+      return new StorageService().conFotoPerfil(requestedAvatar, userId, (data.role ?? user.role) === "DENTIST", (avatarUrl) => {
+        data.avatarUrl = avatarUrl;
+        return apply(repository);
+      }, user.avatarUrl);
+    }, data.isActive !== undefined);
   }
 }

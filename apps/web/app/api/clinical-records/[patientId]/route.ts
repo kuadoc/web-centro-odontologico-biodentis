@@ -26,12 +26,14 @@ export async function GET(
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ patientId: string }> }) {
   try {
-    const user = await requireRole(request, [Role.DENTIST, Role.ADMIN]);
+    const user = await requireRole(request, [Role.DENTIST]);
     accessControl.canCreateClinicalRecord(user.role);
 
     const body = await request.json();
+    const { patientId } = await params;
+    body.patientId = patientId;
     const record = await clinicalRecordService.create(body, user.sub);
     return Response.json(record, { status: 201 });
   } catch (error) {

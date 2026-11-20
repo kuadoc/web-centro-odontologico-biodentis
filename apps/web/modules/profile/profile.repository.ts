@@ -1,12 +1,28 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 /**
  * Acceso a datos del perfil propio del usuario autenticado ("Mi Perfil").
  * Agrupa usuario + ficha de odontologo + disponibilidad + sesiones activas.
  */
 export class ProfileRepository {
+  constructor(private readonly db: Prisma.TransactionClient = prisma) {}
+
+  withLockedUser<T>(userId: string, operation: (repository: ProfileRepository) => Promise<T>) {
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      return operation(new ProfileRepository(tx));
+    }, { maxWait: 10_000, timeout: 30_000 });
+  }
+  changePassword(userId: string, passwordHash: string) {
+    return prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+      const revoked = await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      return revoked.count;
+    });
+  }
   async findUser(userId: string) {
-    return prisma.user.findUnique({ where: { id: userId } });
+    return this.db.user.findUnique({ where: { id: userId } });
   }
 
   async updateUser(
@@ -20,7 +36,7 @@ export class ProfileRepository {
       avatarUrl?: string | null;
     }
   ) {
-    return prisma.user.update({ where: { id: userId }, data });
+    return this.db.user.update({ where: { id: userId }, data });
   }
 
   async findDentistByUserId(userId: string) {

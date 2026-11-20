@@ -64,10 +64,10 @@ export class ReassignmentRepository {
     return new AuditService(new AuditRepository(this.db)).log(actorId, REASSIGNMENT_ACTION, "Appointment", appointmentId, details);
   }
 
-  async report(page: number, pageSize: number) {
+  async report(page: number, pageSize?: number) {
     const where = { action: REASSIGNMENT_ACTION, resourceType: "Appointment" };
     const [items, total] = await Promise.all([
-      this.db.auditLog.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * pageSize, take: pageSize, select: { id: true, details: true, createdAt: true } }),
+      this.db.auditLog.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], ...(pageSize === undefined ? {} : { skip: (page - 1) * pageSize, take: pageSize }), select: { id: true, details: true, createdAt: true } }),
       this.db.auditLog.count({ where }),
     ]);
     return { items, total };

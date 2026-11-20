@@ -1,5 +1,7 @@
 import React from "react";
-import { getResend } from "./resend-client";
+import { createHash } from "node:crypto";
+import { render, toPlainText } from "@react-email/render";
+import { getSmtp } from "./smtp-client";
 import { prisma } from "@/lib/prisma";
 import { canSendEmail } from "./email-policy";
 
@@ -16,6 +18,7 @@ interface SendEmailParams {
   subject: string;
   react: React.ReactNode;
   type: EmailType;
+  idempotencyKey?: string;
 }
 
 async function logEmailAttempt(data: {
@@ -37,33 +40,34 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
     console.info("[EMAIL_SKIPPED]", { type: params.type, reason: "delivery_policy" });
     return false;
   }
-  const from = process.env.EMAIL_FROM;
-
-  if (!from) {
-    console.error("[EMAIL] EMAIL_FROM no está configurado");
-    return false;
-  }
-
   try {
-    const resend = getResend();
-    if (!resend) {
-      console.error("[EMAIL] RESEND_API_KEY no está configurada");
+    const smtp = getSmtp();
+    if (!smtp) {
+      console.error("[EMAIL] Configuración SMTP de Gmail incompleta o inválida");
       return false;
     }
-    const { error } = await resend.emails.send({
-      from,
+    const html = await render(params.react);
+    // Correlación estable para la outbox. SMTP no garantiza deduplicación.
+    const messageId = params.idempotencyKey
+      ? `<biodentis.${createHash("sha256").update(params.idempotencyKey).digest("hex")}@gmail.com>`
+      : undefined;
+    const result = await smtp.transport.sendMail({
+      from: smtp.from,
       to: params.to,
       subject: params.subject,
-      react: params.react,
+      html,
+      text: toPlainText(html),
+      messageId,
     });
 
-    if (error) {
+    if (!result.accepted.length || result.rejected.length) {
+      const message = "El servidor SMTP no aceptó al destinatario";
       console.error(
         "[EMAIL_FAILED]",
         JSON.stringify({
           to: params.to,
           type: params.type,
-          error: error.message,
+          error: message,
           timestamp: new Date().toISOString(),
         })
       );
@@ -73,7 +77,7 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
         type: params.type,
         subject: params.subject,
         status: "failed",
-        error: error.message,
+        error: message,
       });
 
       return false;
@@ -97,7 +101,11 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
 
     return true;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Error desconocido";
+    // No registrar respuestas SMTP completas: pueden incluir contenido o autenticación.
+    const code = error && typeof error === "object" && "code" in error && typeof error.code === "string"
+      ? error.code : "UNKNOWN";
+    const safeCodes = ["EAUTH", "ECONNECTION", "ETIMEDOUT", "ESOCKET", "EDNS", "ETLS", "EENVELOPE", "EMESSAGE", "EPROTOCOL", "ECONNRESET", "ECONNREFUSED"];
+    const message = `Error de envío SMTP (${safeCodes.includes(code) ? code : "UNKNOWN"})`;
     console.error(
       "[EMAIL_ERROR]",
       JSON.stringify({

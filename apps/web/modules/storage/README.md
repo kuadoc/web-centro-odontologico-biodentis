@@ -1,9 +1,10 @@
-# Almacenamiento de imágenes — fases 1 y 2
+# Almacenamiento de fotos de perfil
 
-Implementado: servicio, driver local, contrato S3/R2, lectura HTTP y pruebas.
-No se modifican Prisma, perfiles, endpoints de escritura existentes ni frontend.
-`avatarUrl` y todos sus Base64 se conservan. El módulo aún no participa en el
-guardado de fotos de la aplicación: se integra después de probar estas fases.
+Implementado: servicio, drivers local y S3 compatible con Supabase, lectura HTTP,
+integración con creación/edición de usuarios y Mi Perfil. Adjuntar prepara una
+vista previa local; el guardado del formulario envía una única foto optimizada.
+La landing utiliza `users.avatarUrl` para el retrato del odontólogo y conserva
+sus dimensiones visuales. Configuración y límites: [guía vigente](../../../../docs/almacenamiento-imagenes.md).
 
 ## Configuración
 
@@ -26,20 +27,18 @@ En producción se necesita un volumen/disco persistente, permisos de lectura y
 escritura y copia de seguridad de esta carpeta. Un disco efímero no conserva las
 imágenes entre despliegues. No publicar `uploads/` directamente con otro servidor.
 
-`STORAGE_DRIVER=s3` selecciona el esqueleto explícito compatible con el contrato
-S3/Cloudflare R2; sus operaciones fallan con `InfrastructureError` hasta que se
-implemente. No usa almacenamiento local como alternativa silenciosa.
+`STORAGE_DRIVER=s3` selecciona el driver S3. Requiere la configuración del servidor
+descrita en la guía vigente. No usa almacenamiento local como alternativa silenciosa.
 
 ## Procesamiento y contrato
 
 ```ts
 const imagen = await new StorageService().guardarImagen(file, "odontologos");
 // imagen.key: odontologos/<uuid>.webp
-// imagen.thumbKey: odontologos/<uuid>-thumb.webp
-// También devuelve width/height, thumbWidth/thumbHeight y bytes/thumbBytes.
+// También devuelve width/height y bytes. No genera una miniatura adicional.
 
 await new StorageService().eliminarImagen(imagen.key);
-// Elimina original y thumbnail; admite la clave del thumbnail y es idempotente.
+// Elimina la imagen y admite miniaturas antiguas para compatibilidad.
 ```
 
 El servidor valida `File`, 1 byte–5 MB, firma binaria y decodificación real JPEG,
@@ -48,15 +47,15 @@ declarado. Rechaza formatos no admitidos, imágenes corruptas/animadas y entrada
 de más de 40 millones de píxeles. Aplica orientación EXIF y elimina metadatos
 (incluido GPS). Conserva proporción con `fit: inside`, sin ampliar:
 
-| Destino | Lado mayor | WebP | Thumbnail |
-| --- | ---: | ---: | --- |
-| `odontologos` | 1600 px | calidad 80 | hasta 300 px, calidad 75 |
-| `avatares/<UUID propietario>` | 512 px | calidad 80 | hasta 300 px, calidad 75 |
+| Destino | Lado mayor | WebP |
+| --- | ---: | ---: |
+| `odontologos` | 1600 px | sin pérdida de compresión |
+| `avatares/<UUID propietario>` | 512 px | calidad 80 |
 
-Las claves UUID son inmutables y se crean sin sobrescritura. Si falla la segunda
-escritura, el servicio limpia la primera. El driver elimina una escritura parcial.
-La actualización de referencias de perfiles y la compensación ante fallos de BD
-corresponden a la fase siguiente; no se ejecutan ahora.
+Cada nueva imagen usa una clave UUID. El driver solicita creación sin sobrescritura;
+su garantía depende de la implementación del proveedor. Si falla la persistencia
+del perfil durante el guardado se intenta eliminar la nueva imagen. Los reintentos
+del avatar actual reutilizan la imagen cuando su contenido procesado coincide.
 
 ## Publicación, permisos y caché
 
@@ -109,6 +108,7 @@ Para consultar cabeceras:
 
 ```powershell
 curl.exe -I "http://localhost:3000/api/uploads/odontologos/<UUID>.webp"
+# Solo para una miniatura histórica que ya exista:
 curl.exe -I "http://localhost:3000/api/uploads/odontologos/<UUID>-thumb.webp"
 ```
 
@@ -143,15 +143,10 @@ Las pruebas automatizadas generan imágenes y EXIF/GPS en memoria, usan carpetas
 temporales, verifican los destinos antes de limpiarlos y simulan la consulta de
 identidad. No requieren ni escriben en la base de datos.
 
-## Próximas fases: pendientes de autorización
+## Límites y trabajo pendiente
 
-1. Migración aditiva de `fotoKey` y `fotoThumbKey`, conservando `avatarUrl` y Base64.
-2. Script idempotente con `--dry-run` y reporte: convertidos, omitidos, fallidos y
-   motivos, sin incluir imágenes ni datos sensibles en el reporte. No existe aún
-   un comando de migración de datos en esta entrega.
-3. Integrar multipart, referencias de fotos, listados de solo URLs y auditoría
-   de cambios de perfil; publicar miniaturas con dimensiones explícitas.
-4. Verificar la transferencia durante refrescos y scroll. El listado actual
-   continúa funcionando como antes hasta esa integración.
-
-Eliminar el campo viejo o limpiar sus datos requerirá aprobación posterior.
+Las fotos históricas siguen siendo compatibles. Esta versión no realiza un barrido
+de objetos del bucket. La retirada segura de fotos anteriores, la limpieza durable
+con reintentos y la recuperación ante interrupciones requieren reconciliar primero
+las referencias de la base de datos. La compensación actual no es una transacción
+distribuida entre PostgreSQL y Storage.

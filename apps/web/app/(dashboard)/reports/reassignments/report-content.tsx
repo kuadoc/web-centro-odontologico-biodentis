@@ -1,30 +1,53 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import { Download } from "lucide-react";
 import type { ReassignmentReport } from "@biodentis/shared-validators";
 import { api } from "@/lib/api-client";
 import { Button } from "@workspace/ui/components/button";
 import { Badge } from "@workspace/ui/components/badge";
 import { Card, CardContent } from "@workspace/ui/components/card";
+import { Pagination } from "@workspace/ui/components/pagination";
 import { ROLE_LABELS } from "@/lib/role-labels";
 import { CancellationReportPanel } from "@/components/appointments/cancellation-report";
 import { formatCalendarDate, formatDateTime, formatTime } from "@workspace/ui/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
+import { AppointmentAnalyticsPanel } from "@/components/appointments/appointment-analytics";
 
 export default function ReportContent() {
+  const { user } = useAuth();
+  const [tab, setTab] = useState("activity");
+  const admin = user?.role === "ADMIN";
+  return <div className="space-y-6"><div><h1 className="text-2xl font-bold sm:text-4xl">{admin ? "Reporte de citas" : "Mis citas y recordatorios"}</h1><p className="mt-2 max-w-3xl text-sm text-muted-foreground">{admin ? "Actividad clínica, atenciones realizadas, servicios y seguimiento de recordatorios. Consulta por período y odontólogo." : "Consulta tus atenciones, próximas citas y recordatorios. Solo se muestran tus datos."}</p></div>{admin && <div className="flex flex-wrap gap-2 border-b pb-4" role="group" aria-label="Secciones del reporte"><Button variant={tab === "activity" ? "default" : "outline"} aria-pressed={tab === "activity"} onPress={() => setTab("activity")}>Actividad y atenciones</Button><Button variant={tab === "changes" ? "default" : "outline"} aria-pressed={tab === "changes"} onPress={() => setTab("changes")}>Cancelaciones y reasignaciones</Button></div>}{tab === "activity" || !admin ? <AppointmentAnalyticsPanel admin={admin} /> : <ChangesReport />}</div>;
+}
+
+function ChangesReport() {
   const [page, setPage] = useState(1);
-  const report = useQuery({
-    queryKey: ["reassignment-report", page],
-    queryFn: () => api.get<ReassignmentReport>(`/api/reports/reassignments?page=${page}&pageSize=25`),
+  const [pageSize, setPageSize] = useState(25);
+  const [cancellationState, setCancellationState] = useState("REQUESTED");
+  const download = useMutation({
+    mutationFn: (state: string) => api.download(`/api/reports/appointments/export${state ? `?state=${encodeURIComponent(state)}` : ""}`, "reporte-citas.xlsx"),
   });
-  const totalPages = Math.max(1, Math.ceil((report.data?.total ?? 0) / 25));
+  const report = useQuery({
+    queryKey: ["reassignment-report", page, pageSize],
+    queryFn: () => api.get<ReassignmentReport>(`/api/reports/reassignments?page=${page}&pageSize=${pageSize}`),
+    placeholderData: keepPreviousData,
+  });
+  const totalPages = Math.max(1, Math.ceil((report.data?.total ?? 0) / pageSize));
+  if (report.data && !report.isPlaceholderData && page > totalPages) setPage(totalPages);
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Reporte de reasignaciones y cancelaciones</h1>
         <p className="mt-1 text-sm text-muted-foreground">Solicitudes de cancelación, decisiones e historial de cambios de odontólogo. Consulta exclusiva para administradores.</p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button variant="outline" isDisabled={download.isPending} onPress={() => download.mutate(cancellationState)}><Download className="size-4" aria-hidden="true" />{download.isPending ? "Generando Excel…" : "Exportar a Excel"}</Button>
+          <p className="text-xs text-muted-foreground">Incluye todas las páginas y respeta el filtro de cancelaciones.</p>
+        </div>
+        {download.isError && <p role="alert" className="mt-2 text-sm text-destructive">{download.error.message || "No se pudo exportar el reporte. Inténtalo nuevamente."}</p>}
       </div>
-      <CancellationReportPanel />
+      <CancellationReportPanel state={cancellationState} onStateChange={setCancellationState} />
       <h2 className="text-lg font-semibold">Historial de reasignaciones</h2>
       <Card>
         <CardContent className="p-0">
@@ -49,10 +72,7 @@ export default function ReportContent() {
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4 text-sm">
-            <span className="text-muted-foreground">{report.data?.total ?? 0} reasignaciones · Página {page} de {totalPages}</span>
-            <div className="flex gap-2"><Button variant="outline" isDisabled={page <= 1 || report.isFetching} onPress={() => setPage((value) => value - 1)}>Anterior</Button><Button variant="outline" isDisabled={page >= totalPages || report.isFetching} onPress={() => setPage((value) => value + 1)}>Siguiente</Button></div>
-          </div>
+          <Pagination page={page} pageSize={pageSize} total={report.data?.total ?? 0} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} label="reasignaciones" pageSizeOptions={[10, 25, 50, 100]} isLoading={report.isFetching || report.isError} showPageNumbers ariaLabel="Paginación de reasignaciones" />
         </CardContent>
       </Card>
     </div>

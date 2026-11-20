@@ -1,17 +1,17 @@
+import { PasswordResetRepository } from "@/modules/auth/password-reset.repository";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { ForgotPasswordSchema } from "@biodentis/shared-validators";
 import { handleApiError } from "@/lib/errors";
-import { RateLimiter } from "@/lib/rate-limit";
+import { LoginThrottleService } from "@/modules/auth/login-throttle.service";
 import { hashToken } from "@/lib/auth";
 import { sendPasswordResetEmail } from "@/lib/email/send-emails";
 import { canSendEmail } from "@/lib/email/email-policy";
 
-const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
-const resetLimiter = new RateLimiter(3, FIFTEEN_MINUTES_MS);
+const resetLimiter = new LoginThrottleService();
 
-const RESET_TOKEN_EXPIRY_MINUTES = 30;
+const RESET_TOKEN_EXPIRY_MINUTES = 60;
 
 const GENERIC_MESSAGE = "Si el email está registrado, recibirás instrucciones para restablecer tu contraseña.";
 
@@ -31,8 +31,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "La recuperación por correo está temporalmente limitada a la cuenta de pruebas autorizada." }, { status: 200 });
     }
 
-    const rateLimitKey = `reset:${normalizedEmail}`;
-    if (resetLimiter.isBlocked(rateLimitKey)) {
+    if (!(await resetLimiter.allowPasswordReset(normalizedEmail))) {
       return NextResponse.json({ message: GENERIC_MESSAGE }, { status: 200 });
     }
 
@@ -44,25 +43,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: GENERIC_MESSAGE }, { status: 200 });
     }
 
-    resetLimiter.increment(rateLimitKey);
-
-    await prisma.passwordResetToken.deleteMany({
-      where: { userId: user.id, usedAt: null },
-    });
-
     const rawToken = crypto.randomBytes(32).toString("hex");
     const tokenHash = hashToken(rawToken);
 
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + RESET_TOKEN_EXPIRY_MINUTES);
 
-    await prisma.passwordResetToken.create({
-      data: {
-        tokenHash,
-        userId: user.id,
-        expiresAt,
-      },
-    });
+    await new PasswordResetRepository().issue(user.id, tokenHash, expiresAt);
 
     await sendPasswordResetEmail(user.email, user.firstName, rawToken).catch((error) => {
       console.error("[FORGOT_PASSWORD_EMAIL_FAILED]", { email: normalizedEmail, error });

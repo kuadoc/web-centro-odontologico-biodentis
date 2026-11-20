@@ -98,6 +98,7 @@ export default function AppointmentsPage() {
   });
   const patients = patientDirectory.data?.items ?? [];
   const [form, setForm] = useState({ patientId: "", specialtyId: "", treatmentId: "", dentistId: "", date: "", startTime: "", endTime: "", notes: "" });
+  const [questionnaire, setQuestionnaire] = useState({ reason: "", hasPain: "", problemDuration: "" });
   const notesValidation = RequestAppointmentSchema.shape.notes.safeParse(form.notes);
   const notesError = notesValidation.success ? null : notesValidation.error.issues[0]?.message;
   const booking = useQuery({ queryKey: ["booking-catalog"], queryFn: () => api.get<BookingSpecialty[]>("/api/catalog/booking"), enabled: showForm });
@@ -114,7 +115,7 @@ export default function AppointmentsPage() {
       return;
     }
     try {
-      const payload: Record<string, string> = {
+      const payload: Record<string, unknown> = {
         dentistId: form.dentistId,
         date: form.date,
         startTime: form.startTime,
@@ -122,6 +123,7 @@ export default function AppointmentsPage() {
         treatmentId: form.treatmentId,
       };
       if (notesValidation.data) payload.notes = notesValidation.data;
+      if (user?.role === "PATIENT") Object.assign(payload, { reason: questionnaire.reason, hasPain: questionnaire.hasPain === "yes", problemDuration: questionnaire.problemDuration });
       if (form.patientId) payload.patientId = form.patientId;
       const data = RequestAppointmentSchema.parse(payload);
       if (isReceptionistOrAdmin && !patients.some((patient) => patient.id === data.patientId)) {
@@ -152,6 +154,7 @@ export default function AppointmentsPage() {
     setBookingError("");
     setPatientSearch("");
     setPatientPage(1);
+    setQuestionnaire({ reason: "", hasPain: "", problemDuration: "" });
     setForm({ patientId: "", specialtyId: "", treatmentId: "", dentistId: "", date: "", startTime: "", endTime: "", notes: "" });
     toast(user?.role === "RECEPTIONIST" ? "Cita registrada y confirmada correctamente." : "Cita registrada correctamente.");
   }
@@ -181,8 +184,8 @@ export default function AppointmentsPage() {
         { id: "view", label: "Ver detalle", icon: Eye, onAction: () => setDetailId(appointment.id) },
         { id: "reassign", label: "Reasignar odontólogo", icon: UserRoundCog, isHidden: !((user?.role === "RECEPTIONIST" && appointment.status === "PENDING") || (user?.role === "ADMIN" && appointment.status === "CONFIRMED")), onAction: () => setReassignAppointment(appointment) },
         { id: "confirm", label: "Confirmar cita", icon: CheckCircle, isHidden: !isReceptionistOrAdmin || appointment.status !== "PENDING", isDisabled: confirmMutation.isPending, onAction: () => { void handleAction(appointment.id, "confirm"); } },
-        { id: "complete", label: "Completar cita", icon: CheckCircle, isHidden: !(isDentist || user?.role === "RECEPTIONIST") || appointment.status !== "CONFIRMED", onAction: () => setDetailId(appointment.id) },
-        { id: "cancel", label: appointment.status === "CONFIRMED" ? "Solicitar cancelación" : "Cancelar cita", icon: XCircle, destructive: true, isHidden: user?.role !== "RECEPTIONIST" || !["PENDING", "CONFIRMED"].includes(appointment.status), onAction: () => setCancelAppointment(appointment) },
+        { id: "complete", label: "Completar cita", icon: CheckCircle, isHidden: !isDentist || appointment.status !== "CONFIRMED", onAction: () => setDetailId(appointment.id) },
+        { id: "cancel", label: !isPatient && appointment.status === "CONFIRMED" ? "Solicitar cancelación" : "Cancelar cita", icon: XCircle, destructive: true, isHidden: !["RECEPTIONIST", "PATIENT"].includes(user?.role ?? "") || !["PENDING", "CONFIRMED"].includes(appointment.status), onAction: () => setCancelAppointment(appointment) },
     ];
     if (asMenu) return <ActionMenu label={`Acciones de la cita del ${formatCalendarDate(appointment.date)} a las ${formatTime(appointment.startTime)}`} items={items} />;
     return <div className="flex flex-wrap justify-end gap-2">{items.filter((item) => !item.isHidden).map((item) => {
@@ -341,6 +344,11 @@ export default function AppointmentsPage() {
                 )}
               </div>
               <div className="space-y-2">
+                {isPatient && <div className="space-y-3">
+                  <label className="block text-sm font-medium">Motivo de consulta<input required minLength={3} maxLength={1000} className="mt-1 w-full rounded-lg border p-2" value={questionnaire.reason} onChange={(event) => setQuestionnaire({ ...questionnaire, reason: event.target.value })} /></label>
+                  <label className="block text-sm font-medium">¿Tienes dolor?<select required className="mt-1 w-full rounded-lg border p-2" value={questionnaire.hasPain} onChange={(event) => setQuestionnaire({ ...questionnaire, hasPain: event.target.value })}><option value="">Selecciona una opción</option><option value="yes">Sí</option><option value="no">No</option></select></label>
+                  <label className="block text-sm font-medium">¿Desde cuándo tienes el problema?<input required maxLength={200} className="mt-1 w-full rounded-lg border p-2" value={questionnaire.problemDuration} onChange={(event) => setQuestionnaire({ ...questionnaire, problemDuration: event.target.value })} /></label>
+                </div>}
                 <label htmlFor="appointment-notes" className="text-sm font-medium">Notas (opcional)</label>
                 <input
                   id="appointment-notes"

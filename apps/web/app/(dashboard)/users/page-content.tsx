@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@workspace/ui/components/card";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { ActionMenu } from "@workspace/ui/components/action-menu";
 import { Input } from "@workspace/ui/components/input";
-import { ProfilePhotoPicker } from "@/components/ui/profile-photo-picker";
+import { AvatarPicker } from "@/components/ui/avatar-picker";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useToast } from "@/components/ui/toast-provider";
 import { formatDateTime } from "@workspace/ui/lib/utils";
@@ -127,6 +127,7 @@ export default function UsersPage() {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
   const [photoProcessing, setPhotoProcessing] = useState(false);
+  const savingUser = useRef(false);
 
   const [createForm, setCreateForm] = useState({
     firstName: "",
@@ -186,17 +187,22 @@ export default function UsersPage() {
   }
 
   async function handleCreate() {
+    if (savingUser.current || photoProcessing) return;
+    savingUser.current = true;
     try {
       await createMutation.mutateAsync(createForm);
       setShowCreateModal(false);
       setCreateForm({ firstName: "", lastName: "", email: "", phone: "", role: "DENTIST", password: "BioDent#2024", avatarUrl: null, specialty: "General", licenseNumber: "", university: "" });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Error al crear usuario");
+    } finally {
+      savingUser.current = false;
     }
   }
 
   async function handleEdit() {
-    if (!selectedUser) return;
+    if (!selectedUser || savingUser.current || photoProcessing) return;
+    savingUser.current = true;
     try {
       await updateMutation.mutateAsync({
         id: selectedUser.id,
@@ -205,6 +211,8 @@ export default function UsersPage() {
       setShowEditModal(false);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Error al actualizar");
+    } finally {
+      savingUser.current = false;
     }
   }
 
@@ -518,7 +526,7 @@ export default function UsersPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <ProfilePhotoPicker key={`create-${showCreateModal}`} firstName={createForm.firstName} lastName={createForm.lastName} avatarUrl={createForm.avatarUrl} portrait={createForm.role === "DENTIST"} isSaving={createMutation.isPending} onProcessingChange={setPhotoProcessing} onChange={(avatarUrl) => setCreateForm((form) => ({ ...form, avatarUrl }))} />
+            <AvatarPicker key={`create-${showCreateModal}`} firstName={createForm.firstName} lastName={createForm.lastName} avatarUrl={createForm.avatarUrl} portrait={createForm.role === "DENTIST"} isSaving={createMutation.isPending} onProcessingChange={setPhotoProcessing} onChange={(avatarUrl) => setCreateForm((form) => ({ ...form, avatarUrl }))} />
             {createForm.role === "DENTIST" && <p className="text-xs text-muted-foreground">El nombre, la foto y los datos profesionales se mostrarán en el equipo de la página principal mientras la cuenta esté activa.</p>}
             <div className="rounded-lg bg-muted/50 p-3 flex items-start gap-2">
               <Info className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
@@ -624,7 +632,7 @@ export default function UsersPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <ProfilePhotoPicker key={selectedUser?.id} firstName={editForm.firstName} lastName={editForm.lastName} avatarUrl={editForm.avatarUrl} portrait={selectedUser?.role === "DENTIST"} isSaving={updateMutation.isPending} onProcessingChange={setPhotoProcessing} onChange={(avatarUrl) => setEditForm((form) => ({ ...form, avatarUrl }))} />
+            <AvatarPicker key={selectedUser?.id} firstName={editForm.firstName} lastName={editForm.lastName} avatarUrl={editForm.avatarUrl} portrait={selectedUser?.role === "DENTIST"} isSaving={updateMutation.isPending} onProcessingChange={setPhotoProcessing} onChange={(avatarUrl) => setEditForm((form) => ({ ...form, avatarUrl }))} />
             <div className="rounded-lg bg-muted/50 p-3">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium flex items-center gap-1.5">

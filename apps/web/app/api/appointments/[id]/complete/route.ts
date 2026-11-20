@@ -8,13 +8,13 @@ import { handleApiError } from "@/lib/errors";
 const appointmentService = new AppointmentService();
 const dentistService = new DentistService();
 
-/** PATCH /api/appointments/[id]/complete — recepción o el odontólogo a cargo registran la nota y completan la cita. */
+/** PATCH /api/appointments/[id]/complete — solo el odontólogo asignado completa su cita. */
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requireRole(request, [Role.DENTIST, Role.RECEPTIONIST]);
+    const user = await requireRole(request, [Role.DENTIST]);
     const { id } = await params;
     const body = await request.json();
     const dentist = user.role === Role.DENTIST ? await dentistService.getByUserId(user.sub) : null;

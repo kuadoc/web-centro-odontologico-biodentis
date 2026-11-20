@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { prisma } from "@/lib/prisma";
+import { isLocalTestDatabase } from "./local-database-guard.cts";
 import { UserRepository } from "@/modules/users/user.repository";
 import { UserService } from "@/modules/users/user.service";
 import { DentistRepository } from "@/modules/dentists/dentist.repository";
@@ -10,6 +11,8 @@ import { AvatarSchema, CreateUserSchema, UpdateUserSchema } from "@biodentis/sha
 test("validación de fotos y creación administrativa", () => {
   assert.equal(AvatarSchema.safeParse("/images/angel.jpg").success, true);
   assert.equal(AvatarSchema.safeParse("data:image/jpeg;base64,YWJj").success, true);
+  assert.equal(AvatarSchema.safeParse(`data:image/jpeg;base64,${"A".repeat(4 * 1024 * 1024)}`).success, true);
+  assert.equal(AvatarSchema.safeParse(`data:image/jpeg;base64,${"A".repeat(4 * 1024 * 1024 + 128)}`).success, false);
   for (const value of ["javascript:alert(1)", "/images/../private.jpg", "data:image/svg+xml;base64,YWJj", "x".repeat(512 * 1024 + 1)]) {
     assert.equal(AvatarSchema.safeParse(value).success, false);
   }
@@ -17,12 +20,12 @@ test("validación de fotos y creación administrativa", () => {
   assert.equal(UpdateUserSchema.safeParse({}).success, false);
 });
 
-test("crear, editar y desactivar un odontólogo se refleja en el directorio público", async () => {
+test("crear, editar y desactivar un odontólogo se refleja en el directorio público", { skip: !isLocalTestDatabase() }, async () => {
   const rollback = new Error("ROLLBACK_VERIFICATION");
   const email = `landing-${randomUUID()}@example.test`;
   try {
     await assert.rejects(prisma.$transaction(async (tx) => {
-      const service = new UserService(new UserRepository(tx));
+      const service = new UserService(new UserRepository(tx, { $transaction: async (operation: (db: typeof tx) => Promise<unknown>) => operation(tx) } as unknown as import("@prisma/client").PrismaClient));
       const directory = new DentistRepository(tx);
       const user = await service.create({ role: "DENTIST", firstName: "Verificación", lastName: "Landing", email, password: randomUUID(), avatarUrl: "/images/angel.jpg", specialty: "Ortodoncia", licenseNumber: "TEST-REG", university: "Universidad de prueba" });
       assert.equal("passwordHash" in user, false);

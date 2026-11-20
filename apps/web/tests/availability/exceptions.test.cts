@@ -30,10 +30,11 @@ function fixture(context: TestContext) {
   const appointments = context.mock.method(repository, "findAffectedAppointments", async () => []);
   const create = context.mock.method(repository, "create", async () => ({ id: "exception", status: "CONFIRMED" }));
   const audit = context.mock.method(repository, "record", async () => ({}));
-  return { service: new ExceptionService(repository), appointments, overlap, create, audit };
+  const cancel = context.mock.method(repository, "cancelPending", async () => {});
+  return { service: new ExceptionService(repository), appointments, overlap, create, audit, cancel };
 }
 
-for (const status of ["PENDING", "CONFIRMED"]) {
+for (const status of ["CONFIRMED"]) {
   test(`no registra mantenimiento sobre una cita ${status}, ni altera citas o auditoría`, async (context) => {
     const state = fixture(context);
     state.appointments.mock.mockImplementation(async () => [appointment(status)]);
@@ -48,9 +49,9 @@ for (const status of ["PENDING", "CONFIRMED"]) {
 
 test("el mensaje solo incluye citas dentro del período y horario afectados en Lima", async (context) => {
   const state = fixture(context);
-  state.appointments.mock.mockImplementation(async () => [appointment(), appointment("PENDING", "2026-11-16")]);
+  state.appointments.mock.mockImplementation(async () => [appointment("CONFIRMED"), appointment("PENDING", "2026-11-16")]);
   await assert.rejects(state.service.create(input, actorId), (error: unknown) =>
-    error instanceof ScheduleConflictError && error.message.includes("1 cita pendiente") && !error.message.includes("2026-11-16,")
+    error instanceof ScheduleConflictError && error.message.includes("1 cita confirmada") && !error.message.includes("2026-11-16,")
   );
 });
 
@@ -128,7 +129,7 @@ test("si aparece una cita concurrente se reintenta y se rechaza la excepción", 
       writes++;
       throw new Prisma.PrismaClientKnownRequestError("Conflicto concurrente", { code: "P2034", clientVersion: "test" });
     } },
-    appointment: { findMany: async () => attempts === 1 ? [] : [appointment()] },
+    appointment: { findMany: async () => attempts === 1 ? [] : [appointment("CONFIRMED")] },
   };
   const database = { $transaction: async (operation: (db: typeof tx) => Promise<unknown>, options: unknown) => {
     attempts++;

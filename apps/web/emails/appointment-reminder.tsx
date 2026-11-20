@@ -23,7 +23,7 @@ export default function AppointmentReminderEmail({
         <Heading style={heading}>Recordatorio de cita</Heading>
         <Text style={paragraph}>Hola {patientName},</Text>
         <Text style={paragraph}>
-          Te recordamos que tienes una cita odontológica programada para mañana:
+          Te recordamos tu próxima cita odontológica:
         </Text>
         <Container style={detailsBox}>
           <Text style={detailLabel}>Profesional:</Text>

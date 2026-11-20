@@ -44,7 +44,7 @@ export class ExceptionService {
         appointmentInstant(appointment.date, appointment.startTime) <= endDate &&
         appointmentInstant(appointment.date, appointment.endTime) > startDate
       );
-      if (conflicts.length) {
+      if (conflicts.some((appointment) => appointment.status === "CONFIRMED")) {
         const pending = conflicts.filter((appointment) => appointment.status === "PENDING").length;
         const confirmed = conflicts.length - pending;
         const detail = conflicts.slice(0, 5).map((appointment) =>
@@ -54,6 +54,8 @@ export class ExceptionService {
           `No se puede registrar la excepción: hay ${pending} ${pending === 1 ? "cita pendiente" : "citas pendientes"} y ${confirmed} ${confirmed === 1 ? "cita confirmada" : "citas confirmadas"} en el período y recurso seleccionados.\n${detail}${conflicts.length > 5 ? `\nY ${conflicts.length - 5} citas más.` : ""}\nCoordina con Recepción la reprogramación o reasignación de las pendientes y con Administración la de las confirmadas. No se guardó la excepción ni se modificaron las citas.`
         );
       }
+
+      await repository.cancelPending(conflicts.filter((appointment) => appointment.status === "PENDING").map(({ id }) => id), actorId);
 
       const exception = await repository.create({
         scope: parsed.scope,

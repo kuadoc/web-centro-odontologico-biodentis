@@ -1,13 +1,8 @@
-import bcrypt from "bcrypt";
 import { PatientRepository, type PatientListFilter } from "./patient.repository";
-import { AuditService } from "@/modules/audit/audit.service";
-import { nextPatientCode } from "@/lib/patient-code";
-import { prisma } from "@/lib/prisma";
 import { NotFoundError, DomainError } from "@/lib/errors";
 import { CreatePatientSchema, UpdatePatientSchema } from "@biodentis/shared-validators";
 
 const patientRepository = new PatientRepository();
-const auditService = new AuditService();
 
 type PatientRow = Awaited<ReturnType<PatientRepository["findMany"]>>["items"][number];
 
@@ -116,27 +111,14 @@ export class PatientService {
   async create(input: unknown, actorId: string) {
     const parsed = CreatePatientSchema.parse(input);
 
-    const existing = await patientRepository.findByEmail(parsed.email);
+    const existing = parsed.email ? await patientRepository.findByEmail(parsed.email) : null;
     if (existing) throw new DomainError("El email ya está registrado", 409);
 
-    const passwordHash = await bcrypt.hash(parsed.password, 10);
-    const patient = await prisma.user.create({
-      data: {
-        email: parsed.email,
-        passwordHash,
-        role: "PATIENT",
-        patientCode: await nextPatientCode(),
-        firstName: parsed.firstName,
-        lastName: parsed.lastName,
-        dni: parsed.dni,
-        phone: parsed.phone,
-        address: parsed.address,
-      },
-      select: { id: true, email: true, firstName: true, lastName: true, dni: true, patientCode: true },
+    return patientRepository.withTransaction(async (repository) => {
+      const patient = await repository.createContact(parsed);
+      await repository.record(actorId, "CREATE_PATIENT", patient.id, `Alta de ${patient.patientCode}`);
+      return patient;
     });
-
-    await auditService.log(actorId, "CREATE_PATIENT", "User", patient.id, `Alta de ${patient.patientCode}`);
-    return patient;
   }
 
   /**
@@ -159,9 +141,11 @@ export class PatientService {
       if (taken) throw new DomainError("El email ya está registrado", 409);
     }
 
-    const updated = await patientRepository.update(id, data);
-    await auditService.log(actorId, "UPDATE_PATIENT", "User", id, auditReason.trim());
-    return updated;
+    return patientRepository.withTransaction(async (repository) => {
+      const updated = await repository.update(id, data);
+      await repository.record(actorId, "UPDATE_PATIENT", id, auditReason.trim());
+      return updated;
+    });
   }
 
   /** Activa o desactiva la cuenta. El historial de citas se conserva intacto. */
@@ -176,16 +160,11 @@ export class PatientService {
       throw new DomainError(`La cuenta ya está ${isActive ? "activa" : "desactivada"}`);
     }
 
-    const updated = await patientRepository.update(id, { isActive });
-    await auditService.log(
-      actorId,
-      isActive ? "ACTIVATE_PATIENT" : "DEACTIVATE_PATIENT",
-      "User",
-      id,
-      reason.trim()
-    );
-
-    return updated;
+    return patientRepository.withTransaction(async (repository) => {
+      const updated = await repository.update(id, { isActive });
+      await repository.record(actorId, isActive ? "ACTIVATE_PATIENT" : "DEACTIVATE_PATIENT", id, reason.trim());
+      return updated;
+    });
   }
 
   /** CSV del listado filtrado completo (no solo la pagina visible). */

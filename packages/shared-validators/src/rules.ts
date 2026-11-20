@@ -3,10 +3,9 @@ import { AppointmentStatus } from "@biodentis/shared-types";
 const HOURS_24_IN_MS = 24 * 60 * 60 * 1000;
 
 export function canCancelOrReschedule(appointmentDate: Date, appointmentTime: string, now: Date = new Date()): boolean {
-  const [hours, minutes] = appointmentTime.split(":").map(Number) as [number, number];
-  const appointmentDateTime = new Date(appointmentDate);
-  appointmentDateTime.setHours(hours, minutes, 0, 0);
-  return appointmentDateTime.getTime() - now.getTime() >= HOURS_24_IN_MS;
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(appointmentTime) || !Number.isFinite(appointmentDate.getTime())) return false;
+  const appointmentDateTime = new Date(`${appointmentDate.toISOString().slice(0, 10)}T${appointmentTime}:00-05:00`);
+  return appointmentDateTime.getTime() - now.getTime() > HOURS_24_IN_MS;
 }
 
 export function isValidTimeRange(startTime: string, endTime: string): boolean {

@@ -19,13 +19,15 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(parsed.password, 12);
 
-    const user = await this.authRepository.createPatient({
-      email: parsed.email,
-      passwordHash,
-      role: "PATIENT",
-      firstName: parsed.firstName,
-      lastName: parsed.lastName,
-      phone: parsed.phone,
+    return this.authRepository.withTransaction(async (repository) => {
+      const user = await repository.createPatient({
+        email: parsed.email,
+        passwordHash,
+        role: "PATIENT",
+        firstName: parsed.firstName,
+        lastName: parsed.lastName,
+        dni: parsed.dni,
+        phone: parsed.phone,
     });
 
     const { token: refreshToken, jti } = generateRefreshToken(user.id);
@@ -35,7 +37,7 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_EXPIRATION_DAYS);
 
-    await this.authRepository.createRefreshToken({
+    await repository.createRefreshToken({
       jti,
       tokenHash,
       userId: user.id,
@@ -47,6 +49,7 @@ export class AuthService {
       accessToken,
       refreshToken,
     };
+    });
   }
 
   async login(data: unknown) {

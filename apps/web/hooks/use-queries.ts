@@ -487,6 +487,7 @@ export function useCreateDentalUnit() {
     mutationFn: (data: unknown) => api.post("/api/config/dental-units", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: configKeys.dentalUnits });
+      qc.invalidateQueries({ queryKey: configKeys.full, exact: true });
     },
   });
 }
@@ -498,6 +499,7 @@ export function useUpdateDentalUnit() {
       api.patch(`/api/config/dental-units/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: configKeys.dentalUnits });
+      qc.invalidateQueries({ queryKey: configKeys.full, exact: true });
     },
   });
 }
@@ -508,6 +510,7 @@ export function useDeleteDentalUnit() {
     mutationFn: (id: string) => api.del(`/api/config/dental-units/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: configKeys.dentalUnits });
+      qc.invalidateQueries({ queryKey: configKeys.full, exact: true });
     },
   });
 }

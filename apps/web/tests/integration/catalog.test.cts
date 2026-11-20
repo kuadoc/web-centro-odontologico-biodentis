@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import { prisma } from "@/lib/prisma"
-import { AuditService } from "@/modules/audit/audit.service"
+import { isLocalTestDatabase } from "./local-database-guard.cts"
 import { CatalogAdminService } from "@/modules/service-catalog/catalog-admin.service"
 import { CatalogAdminRepository } from "@/modules/service-catalog/catalog-admin.repository"
 import {
@@ -31,7 +31,7 @@ test("valida duración, precio opcional y decimales", () => {
   )
 })
 
-test("catálogo persistente: asignación, duplicados, disponibilidad y conservación de citas", async () => {
+test("catálogo persistente: asignación, duplicados, disponibilidad y conservación de citas", { skip: !isLocalTestDatabase() }, async () => {
   const rollback = new Error("ROLLBACK_CATALOG_TEST")
   const marker = randomUUID()
   try {
@@ -73,14 +73,8 @@ test("catálogo persistente: asignación, duplicados, disponibilidad y conservac
           const dentist = await tx.dentist.create({
             data: { userId: user.id, specialty: "Test" },
           })
-          const audit = new AuditService()
-          audit.log = (userId, action, resourceType, resourceId, details) =>
-            tx.auditLog.create({
-              data: { userId, action, resourceType, resourceId, details },
-            })
           const service = new CatalogAdminService(
-            new CatalogAdminRepository(tx),
-            audit
+            new CatalogAdminRepository(tx)
           )
           const specialty = await service.saveSpecialty(
             { name: `Test ${marker}`, description: "Descripción" },

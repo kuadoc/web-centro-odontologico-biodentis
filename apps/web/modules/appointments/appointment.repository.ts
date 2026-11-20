@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { AppointmentStatus } from "@biodentis/shared-types";
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { DomainError, NotFoundError, ScheduleConflictError } from "@/lib/errors";
+import { AuthorizationError, DomainError, NotFoundError, ScheduleConflictError } from "@/lib/errors";
 import { withScheduleTransaction } from "./schedule-transaction.repository";
 import { AvailabilityRepository } from "@/modules/availability/availability.repository";
 import { AuditService } from "@/modules/audit/audit.service";
 import { AuditRepository } from "@/modules/audit/audit.repository";
+import { EmailOutboxRepository } from "./email-outbox.repository";
+import { canCancelOrReschedule } from "@biodentis/shared-validators";
 
 export class AppointmentRepository {
   constructor(private readonly transactions: Pick<PrismaClient, "$transaction"> = prisma) {}
@@ -99,15 +101,20 @@ export class AppointmentRepository {
         throw new DomainError("El paciente seleccionado no existe o su cuenta está inactiva. Actualiza la lista y selecciona un paciente activo.", 409);
       }
       const appointment = await tx.appointment.create({ data });
+      await new EmailOutboxRepository(tx).enqueue(appointment.id, "BOOKING");
       if (actorId) await new AuditService(new AuditRepository(tx)).log(actorId, "CREATE_CONFIRMED_APPOINTMENT", "Appointment", appointment.id, JSON.stringify({ patientId: data.patientId, dentistId: data.dentistId, treatmentId: data.treatmentId, date: data.date.toISOString().slice(0, 10), startTime: data.startTime, endTime: data.endTime, status: data.status }));
       return appointment;
     });
   }
 
-  async updateStatus(id: string, status: AppointmentStatus) {
+  async updateStatus(id: string, status: AppointmentStatus, dentistId?: string) {
     const expected = status === "CONFIRMED" ? "PENDING" : "CONFIRMED";
     try {
-      return await prisma.appointment.update({ where: { id, status: expected }, data: { status } });
+      return await this.writeSchedule(async (tx) => {
+        const appointment = await tx.appointment.update({ where: { id, status: expected, ...(dentistId ? { dentistId } : {}) }, data: { status } });
+        if (status === "CONFIRMED") await new EmailOutboxRepository(tx).enqueue(id, "CONFIRMATION");
+        return appointment;
+      });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
         throw new DomainError("La cita cambió de estado. Actualiza la bandeja antes de continuar.", 409);
@@ -117,17 +124,26 @@ export class AppointmentRepository {
   }
 
   /** Crea la nota clínica y marca la cita como COMPLETED de forma atómica. */
-  async completeWithRecord(id: string, patientId: string, dentistId: string, notes: string) {
-    return prisma.$transaction(async (tx) => {
+  async completeWithRecord(id: string, patientId: string, dentistId: string, notes: string, actorId: string) {
+    return this.writeSchedule(async (tx) => {
+      const actor = await tx.dentist.findUnique({ where: { userId: actorId }, select: { id: true, user: { select: { role: true, isActive: true } } } });
+      if (!actor || actor.id !== dentistId || actor.user.role !== "DENTIST" || !actor.user.isActive) throw new AuthorizationError("Solo el odontólogo asignado puede registrar esta atención.");
+      const updated = await tx.appointment.updateMany({ where: { id, patientId, dentistId, status: "CONFIRMED" }, data: { status: "COMPLETED", waitingStatus: "DONE" } });
+      if (updated.count !== 1) throw new DomainError("La cita cambió de estado o de odontólogo. Actualiza la agenda.", 409);
       await tx.clinicalRecord.create({ data: { patientId, dentistId, appointmentId: id, notes } });
-      return tx.appointment.update({ where: { id, status: "CONFIRMED" }, data: { status: "COMPLETED" } });
+      await new AuditService(new AuditRepository(tx)).log(actorId, "CREATE_CLINICAL_RECORD", "Appointment", id, "Nota clínica y atención registradas por el odontólogo asignado.");
+      return tx.appointment.findUniqueOrThrow({ where: { id } });
     });
   }
 
-  async reschedule(id: string, date: Date, startTime: string, endTime: string) {
+  async reschedule(id: string, date: Date, startTime: string, endTime: string, actor?: { userId: string; role: string }) {
     return this.writeSchedule(async (tx) => {
-      const appointment = await tx.appointment.findUnique({ where: { id }, select: { dentistId: true, dentalUnitId: true, status: true, clinicalRecord: { select: { id: true } }, cancellations: { where: { state: "REQUESTED" }, select: { id: true }, take: 1 } } });
+      const appointment = await tx.appointment.findUnique({ where: { id }, select: { patientId: true, date: true, startTime: true, dentistId: true, dentalUnitId: true, status: true, clinicalRecord: { select: { id: true } }, cancellations: { where: { state: "REQUESTED" }, select: { id: true }, take: 1 } } });
       if (!appointment) throw new NotFoundError("Cita no encontrada");
+      if (actor?.role === "PATIENT") {
+        if (appointment.patientId !== actor.userId) throw new AuthorizationError("Solo puedes reprogramar tus propias citas.");
+        if (!canCancelOrReschedule(appointment.date, appointment.startTime)) throw new DomainError("Para reprogramar con 24 horas o menos, contacta con Recepción.");
+      }
       if (!["PENDING", "CONFIRMED"].includes(appointment.status) || appointment.clinicalRecord) throw new DomainError("La cita cambió de estado y no puede reprogramarse.", 409);
       if (appointment.cancellations.length) throw new DomainError("Resuelve la solicitud de cancelación antes de reprogramar esta cita.", 409);
       await this.requireFreeSlot(tx, appointment.dentistId, date, startTime, endTime, id, appointment.dentalUnitId);
