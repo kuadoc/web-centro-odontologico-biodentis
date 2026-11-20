@@ -1,4 +1,5 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { AuthenticationError } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import { nextPatientCode } from "@/lib/patient-code";
 
@@ -8,8 +9,15 @@ type RefreshTokenData = Pick<
 >;
 
 export class AuthRepository {
-  findUserByEmail(email: string) {
-    return prisma.user.findUnique({ where: { email } });
+  constructor(private readonly db: Prisma.TransactionClient = prisma) {}
+
+  withTransaction<T>(operation: (repository: AuthRepository) => Promise<T>) {
+    return prisma.$transaction((tx) => operation(new AuthRepository(tx)));
+  }
+  async findUserByEmail(email: string) {
+    const exact = await prisma.user.findUnique({ where: { email } });
+    // Compatibilidad con cuentas creadas antes de normalizar el correo al registrar.
+    return exact ?? prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
   }
 
   findUserById(id: string) {
@@ -18,29 +26,34 @@ export class AuthRepository {
 
   async createPatient(data: Pick<
     Prisma.UserCreateInput,
-    "email" | "passwordHash" | "role" | "firstName" | "lastName" | "phone"
+    "email" | "passwordHash" | "role" | "firstName" | "lastName" | "dni" | "phone"
   >) {
-    return prisma.user.create({
-      data: { ...data, patientCode: await nextPatientCode() },
+    return this.db.user.create({
+      data: { ...data, patientCode: await nextPatientCode(this.db) },
     });
   }
 
   createRefreshToken(data: RefreshTokenData) {
-    return prisma.refreshToken.create({ data });
+    return this.db.refreshToken.create({ data });
   }
 
   findRefreshTokenByHash(tokenHash: string) {
     return prisma.refreshToken.findUnique({ where: { tokenHash } });
   }
 
-  rotateRefreshToken(tokenHash: string, replacement: RefreshTokenData, revokedAt: Date) {
-    return prisma.$transaction([
+  async rotateRefreshToken(tokenHash: string, replacement: RefreshTokenData, revokedAt: Date) {
+    try { return await prisma.$transaction([
       prisma.refreshToken.update({
-        where: { tokenHash },
+        where: { tokenHash, revokedAt: null, expiresAt: { gte: revokedAt } },
         data: { revokedAt, replacedByToken: replacement.jti },
       }),
       prisma.refreshToken.create({ data: replacement }),
-    ]);
+    ]); } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new AuthenticationError("Refresh token ya utilizado o expirado");
+      }
+      throw error;
+    }
   }
 
   revokeRefreshToken(tokenHash: string, revokedAt: Date) {

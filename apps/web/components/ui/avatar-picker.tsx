@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@workspace/ui/components/button";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Camera, Trash2 } from "lucide-react";
@@ -8,28 +8,39 @@ import { Camera, Trash2 } from "lucide-react";
 /** Lado del cuadrado final. Suficiente para pantallas retina a 96px. */
 const OUTPUT_SIZE = 256;
 const OUTPUT_QUALITY = 0.82;
-const MAX_INPUT_BYTES = 8 * 1024 * 1024;
+const MAX_INPUT_BYTES = 5 * 1024 * 1024;
+const MAX_PORTRAIT_BYTES = 3 * 1024 * 1024;
 
 const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
 
 /**
- * Genera un avatar de 256×256 o un retrato profesional de 640×768 JPEG.
+ * Genera un avatar de 256×256; el retrato público conserva el archivo de entrada.
  *
- * Se hace en el navegador para no subir un archivo de varios MB: lo que viaja
- * al backend es un data URL comprimido que se guarda en la columna
- * `users.avatarUrl`, sin necesidad de almacenamiento de objetos.
+ * El avatar pequeño se comprime en el navegador. El retrato viaja como data URL
+ * con los bytes originales; el servidor valida, optimiza sin pérdida de
+ * compresión y persiste su ruta en el perfil.
  */
 async function toProfileDataUrl(file: File, portrait: boolean): Promise<string> {
+  // La landing necesita más detalle que el avatar del menú. Evitar un recorte
+  // pequeño y una conversión JPEG con pérdida antes de llegar al servidor.
+  if (portrait) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("No se pudo leer el retrato"));
+      reader.onerror = reader.onabort = () => reject(new Error("No se pudo leer el retrato"));
+      reader.readAsDataURL(file);
+    });
+  }
   const bitmap = await createImageBitmap(file);
-  const ratio = portrait ? 5 / 6 : 1;
+  const ratio = 1;
   const cropWidth = Math.min(bitmap.width, bitmap.height * ratio);
   const cropHeight = cropWidth / ratio;
   const sx = (bitmap.width - cropWidth) / 2;
   const sy = (bitmap.height - cropHeight) / 2;
 
   const canvas = document.createElement("canvas");
-  canvas.width = portrait ? 640 : OUTPUT_SIZE;
-  canvas.height = portrait ? 768 : OUTPUT_SIZE;
+  canvas.width = OUTPUT_SIZE;
+  canvas.height = OUTPUT_SIZE;
 
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("No se pudo procesar la imagen");
@@ -43,13 +54,13 @@ async function toProfileDataUrl(file: File, portrait: boolean): Promise<string> 
 export interface AvatarPickerProps {
   firstName?: string | null;
   lastName?: string | null;
-  /** Foto guardada actualmente. */
+  /** Foto actual o selección local pendiente de guardar. */
   avatarUrl?: string | null;
   /** `null` = quitar la foto. */
   onChange: (dataUrl: string | null) => Promise<void> | void;
   isSaving?: boolean;
   disabled?: boolean;
-  /** Preserva un retrato de 640×768 para el perfil público del odontólogo. */
+  /** Envía el retrato público sin recortar ni recomprimir en el navegador. */
   portrait?: boolean;
   onProcessingChange?: (processing: boolean) => void;
 }
@@ -65,13 +76,11 @@ export function AvatarPicker({
   onProcessingChange,
 }: AvatarPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
 
   const busy = processing || isSaving;
-  const shown = preview ?? avatarUrl ?? null;
-  useEffect(() => setPreview(null), [avatarUrl]);
+  const shown = avatarUrl ?? null;
 
   const handleFile = async (file: File) => {
     setError(null);
@@ -80,8 +89,8 @@ export function AvatarPicker({
       setError("Formato no admitido. Usa JPG, PNG o WebP.");
       return;
     }
-    if (file.size > MAX_INPUT_BYTES) {
-      setError("La imagen supera los 8 MB.");
+    if (file.size > (portrait ? MAX_PORTRAIT_BYTES : MAX_INPUT_BYTES)) {
+      setError(portrait ? "El retrato supera los 3 MB permitidos para enviarlo sin recomprimir." : "La imagen supera los 5 MB.");
       return;
     }
 
@@ -89,10 +98,8 @@ export function AvatarPicker({
     onProcessingChange?.(true);
     try {
       const dataUrl = await toProfileDataUrl(file, portrait);
-      setPreview(dataUrl);
       await onChange(dataUrl);
     } catch (e) {
-      setPreview(null);
       setError(e instanceof Error ? e.message : "No se pudo procesar la imagen");
     } finally {
       setProcessing(false);
@@ -104,7 +111,6 @@ export function AvatarPicker({
     setError(null);
     setProcessing(true);
     try {
-      setPreview(null);
       await onChange(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo quitar la foto");
@@ -139,7 +145,7 @@ export function AvatarPicker({
 
         {busy && (
           <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/70">
-            <span className="text-[10px] font-medium">Guardando…</span>
+            <span className="text-[10px] font-medium">{isSaving ? "Guardando…" : "Preparando…"}</span>
           </div>
         )}
       </div>
@@ -164,7 +170,8 @@ export function AvatarPicker({
         </Button>
       )}
 
-      {error && <p className="max-w-[12rem] text-center text-xs text-destructive">{error}</p>}
+      {!disabled && <p className="text-center text-xs text-muted-foreground">JPG, PNG o WebP · Máximo {portrait ? 3 : 5} MB</p>}
+      {error && <p role="alert" className="max-w-[12rem] text-center text-xs text-destructive">{error}</p>}
     </div>
   );
 }

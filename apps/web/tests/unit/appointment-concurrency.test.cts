@@ -25,6 +25,7 @@ function databaseError(code: string) {
 test("reserva: comprueba solapamientos y guarda en la misma transacción serializable", async (context) => {
   const queries: unknown[] = [];
   const transaction = {
+    emailOutbox: { upsert: async () => ({}) },
     scheduleException: { findFirst: async () => null },
     user: { findUnique: async () => ({ role: "PATIENT", isActive: true }) },
     dentist: { findUnique: async () => ({ user: { isActive: true, role: "DENTIST" } }) },

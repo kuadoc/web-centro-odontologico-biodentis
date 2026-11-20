@@ -3,7 +3,7 @@ import { AppointmentService } from "@/modules/appointments/appointment.service";
 import { requireRole } from "@/lib/middleware";
 import { handleApiError } from "@/lib/errors";
 import { Role } from "@biodentis/shared-types";
-import { AppointmentNotificationService } from "@/modules/appointments/appointment-notification.service";
+import { EmailOutboxService } from "@/modules/appointments/email-outbox.service";
 
 const appointmentService = new AppointmentService();
 
@@ -16,7 +16,7 @@ export async function PATCH(
     const { id } = await params;
     const appointment = await appointmentService.confirm(id);
 
-    await new AppointmentNotificationService().sendBookingNotice(id);
+    await new EmailOutboxService().tryDeliver(id);
 
     return Response.json(appointment);
   } catch (error) {

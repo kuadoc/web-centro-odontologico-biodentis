@@ -10,12 +10,21 @@ import { Label } from "@workspace/ui/components/label";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { PasswordInput } from "@/components/auth/password-input";
 import { useAuth } from "@/hooks/use-auth";
+import { normalizeRegistrationPhone } from "@/lib/registration-form";
 import styles from "@/components/auth/auth.module.css";
+
+// Deja solo letras (con tildes, ñ y ü) y espacios.
+const onlyLetters = (value: string) =>
+  value.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]/g, "");
+
+// Deja solo dígitos y corta a un máximo de 8 (largo del DNI peruano).
+const onlyDniDigits = (value: string) =>
+  value.replace(/\D/g, "").slice(0, 8);
 
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuth();
-  const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", phone: "" });
+  const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", dni: "", phone: "" });
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -47,12 +56,16 @@ export default function RegisterPage() {
         <div className={styles.nameFields}>
           <div className={styles.field}>
             <Label htmlFor="firstName">Nombres</Label>
-            <Input id="firstName" name="firstName" autoComplete="given-name" placeholder="Ej. María José" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} disabled={isLoading} required />
+            <Input id="firstName" name="firstName" autoComplete="given-name" placeholder="Ej. María José" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: onlyLetters(event.target.value) })} disabled={isLoading} required />
           </div>
           <div className={styles.field}>
             <Label htmlFor="lastName">Apellidos</Label>
-            <Input id="lastName" name="lastName" autoComplete="family-name" placeholder="Ej. Castillo Rivas" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} disabled={isLoading} required />
+            <Input id="lastName" name="lastName" autoComplete="family-name" placeholder="Ej. Castillo Rivas" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: onlyLetters(event.target.value) })} disabled={isLoading} required />
           </div>
+        </div>
+        <div className={styles.field}>
+          <Label htmlFor="dni">DNI</Label>
+          <Input id="dni" name="dni" inputMode="numeric" maxLength={8} pattern="[0-9]{8}" title="El DNI debe tener 8 dígitos" autoComplete="off" placeholder="Ej. 12345678" value={form.dni} onChange={(event) => setForm({ ...form, dni: onlyDniDigits(event.target.value) })} aria-describedby="dni-hint" disabled={isLoading} required />
         </div>
         <div className={styles.field}>
           <Label htmlFor="email">Correo electrónico</Label>
@@ -60,7 +73,7 @@ export default function RegisterPage() {
         </div>
         <div className={styles.field}>
           <Label htmlFor="phone">Teléfono <span className={styles.optional}>(opcional)</span></Label>
-          <Input id="phone" name="phone" type="tel" autoComplete="tel" placeholder="Ej. +51 987 654 321" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} disabled={isLoading} />
+          <Input id="phone" name="phone" type="tel" inputMode="numeric" pattern="[0-9]{9}" title="Ingresa un teléfono de 9 dígitos; puedes pegarlo con el prefijo +51" autoComplete="tel" placeholder="Ej. 987654321" value={form.phone} onChange={(event) => setForm({ ...form, phone: normalizeRegistrationPhone(event.target.value) })} disabled={isLoading} />
         </div>
         <div className={styles.field}>
           <Label htmlFor="password">Contraseña</Label>

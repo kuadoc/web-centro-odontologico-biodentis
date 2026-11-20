@@ -14,7 +14,7 @@ const expectedRoutes: Record<Role, string[]> = {
   ADMIN: ["/dashboard", "/appointments", "/patients", "/dentists", "/clinical-records", "/users", "/config", "/profile", "/reports/reassignments"],
   RECEPTIONIST: ["/dashboard", "/appointments", "/patients", "/profile"],
   DENTIST: ["/dashboard", "/appointments", "/patients", "/clinical-records", "/profile"],
-  PATIENT: ["/appointments", "/clinical-records", "/profile"],
+  PATIENT: ["/appointments", "/clinical-records", "/profile", "/reports/reassignments"],
 };
 
 for (const role of Object.values(Role)) {

@@ -1,4 +1,5 @@
 import { sendEmail } from "./send-email";
+import { emailFrontendUrl } from "@/lib/env";
 import ResetPasswordEmail from "@/emails/reset-password";
 import WelcomeEmail from "@/emails/welcome";
 import AppointmentConfirmationEmail from "@/emails/appointment-confirmation";
@@ -10,7 +11,7 @@ export async function sendPasswordResetEmail(
   userName: string,
   token: string
 ): Promise<boolean> {
-  const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+  const resetLink = `${emailFrontendUrl()}/reset-password?token=${token}`;
 
   return sendEmail({
     to,
@@ -61,7 +62,8 @@ export async function sendAppointmentRegistration(
     serviceName: string;
     specialtyName: string;
     status: "PENDING" | "CONFIRMED";
-  }
+  },
+  idempotencyKey?: string
 ): Promise<boolean> {
   const confirmed = data.status === "CONFIRMED";
   return sendEmail({
@@ -69,6 +71,7 @@ export async function sendAppointmentRegistration(
     subject: confirmed ? "Cita confirmada - BIODENTIS" : "Cita registrada, pendiente de confirmación - BIODENTIS",
     react: AppointmentConfirmationEmail({ ...data, clinicName: "BIODENTIS" }),
     type: confirmed ? "appointment_confirmation" : "appointment_registration",
+    idempotencyKey,
   });
 }
 
@@ -79,13 +82,15 @@ export async function sendAppointmentReminder(
     dentistName: string;
     date: string;
     time: string;
-  }
+  },
+  idempotencyKey?: string
 ): Promise<boolean> {
   return sendEmail({
     to,
     subject: "Recordatorio de cita - BIODENTIS",
     react: AppointmentReminderEmail({ ...data, clinicName: "BIODENTIS" }),
     type: "appointment_reminder",
+    idempotencyKey,
   });
 }
 
@@ -97,12 +102,14 @@ export async function sendAppointmentCancelled(
     date: string;
     time: string;
     reason?: string;
-  }
+  },
+  idempotencyKey?: string
 ): Promise<boolean> {
   return sendEmail({
     to,
     subject: "Cita cancelada - BIODENTIS",
     react: AppointmentCancelledEmail({ ...data, clinicName: "BIODENTIS" }),
     type: "appointment_cancelled",
+    idempotencyKey,
   });
 }

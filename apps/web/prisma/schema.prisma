@@ -89,7 +89,7 @@ model User {
   role         Role
   firstName    String
   lastName     String
-  dni          String?  @db.VarChar(8)
+  dni          String?  @unique @db.VarChar(8)
   phone          String?
   secondaryPhone String?
   address        String?
@@ -107,6 +107,7 @@ model User {
   cancellationRequests AppointmentCancellation[] @relation("CancellationRequester")
   cancellationReviews  AppointmentCancellation[] @relation("CancellationReviewer")
   auditLogs            AuditLog[]
+  cancelledAppointments Appointment[] @relation("AppointmentCanceller")
   refreshTokens        RefreshToken[]
   passwordResetTokens  PasswordResetToken[]
 
@@ -116,6 +117,7 @@ model User {
 model Dentist {
   id             String  @id @default(uuid())
   userId         String  @unique
+  /// Descripción profesional; las habilitaciones de reserva viven en specialties.
   specialty      String
   licenseNumber  String?
   university     String?
@@ -194,12 +196,14 @@ model Appointment {
   calledAt      DateTime?
 
   patient        User             @relation(fields: [patientId], references: [id])
+  cancelledBy    User?            @relation("AppointmentCanceller", fields: [cancelledById], references: [id], onDelete: Restrict)
   dentist        Dentist          @relation(fields: [dentistId], references: [id])
   treatment      Treatment?       @relation(fields: [treatmentId], references: [id])
   dentalUnit     DentalUnit?      @relation(fields: [dentalUnitId], references: [id])
   treatmentPlan  TreatmentPlan?   @relation(fields: [treatmentPlanId], references: [id])
   clinicalRecord ClinicalRecord?
   cancellations AppointmentCancellation[]
+  emailOutbox EmailOutbox[]
 
   /// La unicidad de citas no canceladas se aplica con el índice parcial SQL de la migración.
   @@index([dentistId, date, startTime])
@@ -236,6 +240,7 @@ model AppointmentCancellation {
 model Treatment {
   id              String   @id @default(uuid())
   name            String
+  /// Copia compatible de Specialty.name, mantenida por triggers SQL cuando hay specialtyId.
   category        String
   durationMinutes Int      @default(30)
   price           Decimal? @db.Decimal(10, 2)
@@ -306,6 +311,7 @@ model InventoryItem {
 
 model ClinicalRecord {
   id            String   @id @default(uuid())
+  /// Datos derivados de la cita; triggers diferidos comprueban igualdad al commit.
   patientId     String
   dentistId     String
   appointmentId String   @unique
@@ -435,4 +441,43 @@ model EmailLog {
   @@index([status])
   @@index([createdAt])
   @@map("email_logs")
+}
+
+model AuthThrottle {
+  key       String   @id
+  count     Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("auth_throttles")
+}
+
+model EmailOutbox {
+  id          String   @id @default(uuid())
+  appointmentId String
+  kind        String
+  attempts    Int      @default(0)
+  availableAt DateTime @default(now())
+  deliveredAt DateTime?
+  outcome     String?
+  lockedUntil DateTime?
+  createdAt   DateTime @default(now())
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+
+  @@unique([appointmentId, kind])
+  @@index([deliveredAt, availableAt])
+  @@map("email_outbox")
+}
+
+model ScheduledJobRun {
+  id         String   @id @default(uuid())
+  job        String
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  success    Boolean?
+  processed  Int      @default(0)
+  failed     Int      @default(0)
+
+  @@index([job, startedAt])
+  @@map("scheduled_job_runs")
 }

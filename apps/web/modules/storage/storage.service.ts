@@ -15,8 +15,48 @@ function detectarFormato(data: Buffer): "jpeg" | "png" | "webp" | null {
 export class StorageService {
   constructor(private readonly repository = new StorageRepository()) {}
 
+  /** Persiste la ruta en BD solo después de guardar; compensa si falla la BD. */
+  async conFotoPerfil<T>(
+    valor: string | null | undefined, propietario: string, publica: boolean,
+    persistir: (url: string | null | undefined) => Promise<T>,
+    actual?: string | null,
+  ): Promise<T> {
+    if (valor?.startsWith("/api/uploads/")) {
+      const clave = ImagenStorageClaveSchema.parse(valor.slice("/api/uploads/".length));
+      if (clave.startsWith("avatares/") && (publica || clave.split("/")[1] !== propietario)) {
+        throw new AuthorizationError("La imagen no pertenece a este perfil");
+      }
+    }
+    if (!valor?.startsWith("data:")) return persistir(valor);
+    const bytes = Buffer.from(valor.slice(valor.indexOf(",") + 1), "base64");
+    const carpeta = publica ? "odontologos" : `avatares/${propietario}`;
+    const preparada = await this.prepararImagen(new File([Uint8Array.from(bytes)], "perfil"), carpeta);
+    // El llamador bloquea la fila del usuario hasta persistir. Un reintento,
+    // incluso desde otra instancia, reutiliza la imagen ya confirmada en BD.
+    if (actual?.startsWith(`/api/uploads/${carpeta}/`)) {
+      const clave = ImagenStorageClaveSchema.parse(actual.slice("/api/uploads/".length));
+      let existente: Uint8Array | undefined;
+      try {
+        existente = await this.repository.leer(clave);
+      } catch (error) {
+        if (!(error instanceof NotFoundError)) throw error;
+      }
+      if (existente && preparada.imagen.data.equals(Buffer.from(existente))) return persistir(actual);
+    }
+    const imagen = await this.guardarPreparada(preparada);
+    try { return await persistir(`/api/uploads/${imagen.key}`); }
+    catch (error) {
+      await this.eliminarImagen(imagen.key);
+      throw error;
+    }
+  }
+
   /** La carpeta de destino siempre la decide un service del servidor. */
   async guardarImagen(input: unknown, carpetaInput: unknown) {
+    return this.guardarPreparada(await this.prepararImagen(input, carpetaInput));
+  }
+
+  private async prepararImagen(input: unknown, carpetaInput: unknown) {
     const file = GuardarImagenArchivoSchema.parse(input);
     const carpeta = GuardarImagenCarpetaSchema.parse(carpetaInput);
     const contenido = Buffer.from(await file.arrayBuffer());
@@ -28,7 +68,7 @@ export class StorageService {
     if (!formato) throw new ValidationError("Solo se permiten imágenes JPEG, PNG o WebP válidas");
 
     const limite = carpeta === "odontologos" ? 1600 : 512;
-    let procesadas;
+    let imagen;
     try {
       const pipeline = sharp(contenido, { failOn: "warning", limitInputPixels: 40_000_000 });
       const metadata = await pipeline.metadata();
@@ -37,31 +77,23 @@ export class StorageService {
       }
       // autoOrient aplica EXIF antes de que la salida elimine todos los metadatos.
       pipeline.autoOrient();
-      procesadas = await Promise.all([
-        pipeline.clone().resize({ width: limite, height: limite, fit: "inside", withoutEnlargement: true }).webp({ quality: 80 }).toBuffer({ resolveWithObject: true }),
-        pipeline.clone().resize({ width: 300, height: 300, fit: "inside", withoutEnlargement: true }).webp({ quality: 75 }).toBuffer({ resolveWithObject: true }),
-      ]);
+      imagen = await pipeline.resize({ width: limite, height: limite, fit: "inside", withoutEnlargement: true })
+        .webp(carpeta === "odontologos" ? { lossless: true, effort: 4 } : { quality: 80 }).toBuffer({ resolveWithObject: true });
     } catch (error) {
       if (error instanceof ValidationError) throw error;
       throw new ValidationError("No se pudo procesar la imagen; revisa su formato, integridad y dimensiones");
     }
 
-    const [imagen, thumbnail] = procesadas;
+    return { carpeta, imagen };
+  }
+
+  private async guardarPreparada({ carpeta, imagen }: Awaited<ReturnType<StorageService["prepararImagen"]>>) {
     const uuid = randomUUID();
     const key = `${carpeta}/${uuid}.webp`;
-    const thumbKey = `${carpeta}/${uuid}-thumb.webp`;
     await this.repository.guardar(key, imagen.data);
-    try {
-      await this.repository.guardar(thumbKey, thumbnail.data);
-    } catch (error) {
-      try { await this.repository.eliminar(key); }
-      catch { throw new InfrastructureError("No se pudo completar ni limpiar el guardado de la imagen"); }
-      throw error;
-    }
     return {
-      key, thumbKey,
+      key,
       width: imagen.info.width, height: imagen.info.height, bytes: imagen.info.size,
-      thumbWidth: thumbnail.info.width, thumbHeight: thumbnail.info.height, thumbBytes: thumbnail.info.size,
     };
   }
 

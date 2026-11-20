@@ -6,13 +6,16 @@ export async function withScheduleTransaction<T>(
   database: Pick<PrismaClient, "$transaction">,
   operation: (tx: Prisma.TransactionClient) => Promise<T>,
   duplicateMessage = "El odontólogo ya tiene una cita en ese horario",
+  timeout?: number,
 ): Promise<T> {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      return await database.$transaction(operation, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      return await database.$transaction(operation, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, ...(timeout === undefined ? {} : { timeout }) });
     } catch (error) {
       if (!(error instanceof Prisma.PrismaClientKnownRequestError)) throw error;
       if (error.code === "P2002") throw new ScheduleConflictError(duplicateMessage);
+      // PostgreSQL EXCLUDE puede llegar como error de restricción o SQL crudo.
+      if ((error.code === "P2004" || error.code === "P2010") && JSON.stringify(error.meta ?? {}).includes("23P01")) throw new ScheduleConflictError(duplicateMessage);
       if (error.code !== "P2034") throw error;
     }
   }

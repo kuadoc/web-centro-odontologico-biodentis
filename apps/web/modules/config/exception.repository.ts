@@ -4,6 +4,7 @@ import { clinicDateKey } from "@/lib/clinic-calendar";
 import { withScheduleTransaction } from "@/modules/appointments/schedule-transaction.repository";
 import { AuditService } from "@/modules/audit/audit.service";
 import { AuditRepository } from "@/modules/audit/audit.repository";
+import { CancellationRepository } from "@/modules/appointments/cancellation.repository";
 import type { z } from "zod";
 import type { ExceptionScopeSchema, ExceptionStatusSchema } from "@biodentis/shared-validators";
 
@@ -42,6 +43,9 @@ export class ExceptionRepository {
 
   record(actorId: string, id: string, details: string) {
     return new AuditService(new AuditRepository(this.db)).log(actorId, "CREATE_SCHEDULE_EXCEPTION", "ScheduleException", id, details);
+  }
+  cancelPending(ids: string[], actorId: string) {
+    return new CancellationRepository(this.db, this.transactions).cancelPendingAutomatically(ids, actorId, "Cancelación automática por excepción de horario registrada por Administración.");
   }
   async list(filters: {
     dentistId?: string;

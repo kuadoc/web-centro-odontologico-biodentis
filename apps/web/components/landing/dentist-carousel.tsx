@@ -13,7 +13,7 @@ function Portrait({ person }: { person: PublicDentist }) {
   const src = person.user.avatarUrl;
   return <div className={styles.portrait}>
     {src && failedSrc !== src ? (
-      // Las fotos del perfil pueden ser data URL; no dependen de servicios externos.
+      // La URL proviene del perfil persistido; las fotos adjuntas se sirven desde Storage.
       // eslint-disable-next-line @next/next/no-img-element
       <img src={src} alt={`Foto de ${person.user.firstName} ${person.user.lastName}`} loading="lazy" onError={() => setFailedSrc(src)} />
     ) : <span className={styles.portraitFallback} aria-label="Sin foto de perfil">{initialsOf(person.user.firstName, person.user.lastName)}</span>}

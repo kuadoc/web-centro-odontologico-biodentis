@@ -9,6 +9,7 @@ export {
 } from "./enums";
 export {
   StorageDriverSchema,
+  S3ConfigSchema,
   CatalogIdSchema,
   SaveSpecialtySchema,
   SaveCatalogServiceSchema,
@@ -18,6 +19,8 @@ export {
   ImagenStorageClaveSchema,
   GuardarImagenArchivoSchema,
   RegisterSchema,
+  DniSchema,
+  ContactPhoneSchema,
   LoginSchema,
   RequestAppointmentSchema,
   RescheduleAppointmentSchema,
@@ -31,6 +34,9 @@ export {
   CancellationSnapshotSchema,
   CancellationStateSchema,
   CancellationReportQuerySchema,
+  ExportAppointmentReportSchema,
+  AppointmentAnalyticsQuerySchema,
+  AppointmentAnalyticsSchema,
   ReassignmentAuditDetailSchema,
   AppointmentStatusUpdateSchema,
   CreateClinicalRecordSchema,
@@ -63,6 +69,7 @@ export {
 } from "./schemas";
 export type { ReassignmentAuditDetail, ReassignmentReport } from "./schemas";
 export type { CancellationReport, CancellationReportItem } from "./schemas";
+export type { AppointmentAnalytics, AppointmentAnalyticsQuery } from "./schemas";
 export {
   canCancelOrReschedule,
   isValidTimeRange,

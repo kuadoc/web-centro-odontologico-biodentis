@@ -1,6 +1,6 @@
 import { ClinicalRecordRepository } from "./clinical-record.repository";
 import { CreateClinicalRecordSchema } from "@biodentis/shared-validators";
-import { NotFoundError, DomainError } from "@/lib/errors";
+import { NotFoundError } from "@/lib/errors";
 
 const clinicalRecordRepository = new ClinicalRecordRepository();
 
@@ -15,20 +15,10 @@ export class ClinicalRecordService {
     return record;
   }
 
-  async create(data: unknown, dentistId: string) {
+  async create(data: unknown, dentistUserId: string) {
     const parsed = CreateClinicalRecordSchema.parse(data);
 
-    const existing = await clinicalRecordRepository.findById(parsed.appointmentId);
-    if (existing) {
-      throw new DomainError("Ya existe un historial clínico para esta cita");
-    }
-
-    return clinicalRecordRepository.create({
-      patientId: parsed.patientId,
-      dentistId,
-      appointmentId: parsed.appointmentId,
-      notes: parsed.notes,
-    });
+    return clinicalRecordRepository.createForAppointment(parsed, dentistUserId);
   }
 
   async update(id: string, notes: string) {

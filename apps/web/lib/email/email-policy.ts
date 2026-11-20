@@ -1,8 +1,7 @@
+import { emailPolicyConfig } from "@/lib/env";
+
 /** En pruebas solo se permite el destinatario original autorizado; nunca se redirigen correos. */
-export function canSendEmail(to: string, config: { EMAIL_MODE?: string; EMAIL_TEST_RECIPIENT?: string } = {
-  EMAIL_MODE: process.env.EMAIL_MODE,
-  EMAIL_TEST_RECIPIENT: process.env.EMAIL_TEST_RECIPIENT,
-}): boolean {
+export function canSendEmail(to: string, config: { EMAIL_MODE?: string; EMAIL_TEST_RECIPIENT?: string } = emailPolicyConfig()): boolean {
   const mode = config.EMAIL_MODE ?? "live";
   if (mode === "live") return true;
   if (mode !== "test") return false;

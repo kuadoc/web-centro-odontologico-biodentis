@@ -20,18 +20,18 @@ async function png(width: number, height: number): Promise<Buffer> {
   return sharp({ create: { width, height, channels: 4, background: { r: 40, g: 80, b: 120, alpha: 0.5 } } }).png().toBuffer();
 }
 
-test("odontólogo: WebP hasta 1600px, thumbnail hasta 300px y claves aleatorias", async (context) => {
+test("odontólogo: guarda un solo WebP hasta 1600px con clave aleatoria", async (context) => {
   const directory = await temporaryDirectory(context);
   const driver = new LocalStorageDriver(directory);
   const service = new StorageService(new StorageRepository(driver));
   // El nombre y MIME declarados no determinan el formato real.
   const result = await service.guardarImagen(asFile(await png(3200, 1600), "../../archivo.exe", "text/html"), "odontologos");
   assert.match(result.key, /^odontologos\/[0-9a-f-]{36}\.webp$/);
-  assert.equal(result.thumbKey, result.key.replace(".webp", "-thumb.webp"));
-  assert.deepEqual([result.width, result.height, result.thumbWidth, result.thumbHeight], [1600, 800, 300, 150]);
+  assert.equal("thumbKey" in result, false);
+  assert.deepEqual([result.width, result.height], [1600, 800]);
   const main = await sharp(Buffer.from(await driver.leer(result.key))).metadata();
-  const thumb = await sharp(Buffer.from(await driver.leer(result.thumbKey))).metadata();
-  assert.equal(main.format, "webp"); assert.equal(thumb.format, "webp");
+  assert.equal(main.format, "webp");
+  assert.deepEqual(await readdir(path.join(directory, "odontologos")), [path.basename(result.key)]);
   assert.equal(main.hasAlpha, true);
   assert.equal(result.bytes, (await driver.leer(result.key)).byteLength);
   const second = await service.guardarImagen(asFile(await png(32, 16)), "odontologos");
@@ -44,12 +44,25 @@ test("avatar: límite de 512px; las imágenes pequeñas no se amplían", async (
   const owner = randomUUID();
   const result = await service.guardarImagen(asFile(await png(700, 1400)), `avatares/${owner}`);
   assert.ok(result.key.startsWith(`avatares/${owner}/`));
-  assert.deepEqual([result.width, result.height, result.thumbWidth, result.thumbHeight], [256, 512, 150, 300]);
+  assert.deepEqual([result.width, result.height], [256, 512]);
   const small = await service.guardarImagen(asFile(await png(64, 32)), "odontologos");
-  assert.deepEqual([small.width, small.height, small.thumbWidth, small.thumbHeight], [64, 32, 64, 32]);
+  assert.deepEqual([small.width, small.height], [64, 32]);
 });
 
-test("aplica orientación EXIF y elimina EXIF/GPS y demás metadatos en ambas versiones", async (context) => {
+test("retrato público: WebP sin pérdida conserva exactamente los píxeles sin redimensionado", async (context) => {
+  const directory = await temporaryDirectory(context);
+  const driver = new LocalStorageDriver(directory);
+  const pixels = Buffer.alloc(180 * 120 * 3);
+  for (let i = 0; i < pixels.length; i++) pixels[i] = (i * 47 + Math.floor(i / 19)) % 256;
+  const input = await sharp(pixels, { raw: { width: 180, height: 120, channels: 3 } }).png().toBuffer();
+  const image = await new StorageService(new StorageRepository(driver)).guardarImagen(asFile(input), "odontologos");
+  const decoded = await sharp(Buffer.from(await driver.leer(image.key))).removeAlpha().raw().toBuffer();
+  assert.deepEqual([image.width, image.height], [180, 120]);
+  assert.deepEqual(decoded, pixels);
+  assert.deepEqual(await readdir(path.join(directory, "odontologos")), [path.basename(image.key)]);
+});
+
+test("aplica orientación EXIF y elimina EXIF/GPS y demás metadatos", async (context) => {
   const directory = await temporaryDirectory(context);
   const driver = new LocalStorageDriver(directory);
   const service = new StorageService(new StorageRepository(driver));
@@ -59,8 +72,8 @@ test("aplica orientación EXIF y elimina EXIF/GPS y demás metadatos en ambas ve
   assert.equal(original.orientation, 6);
   assert.ok(original.exif && original.exif.length >= 90, "El fixture contiene orientación y el IFD GPS");
   const result = await service.guardarImagen(asFile(input, "foto.jpeg", "image/jpeg"), "odontologos");
-  assert.deepEqual([result.width, result.height, result.thumbWidth, result.thumbHeight], [800, 400, 300, 150]);
-  for (const key of [result.key, result.thumbKey]) {
+  assert.deepEqual([result.width, result.height], [800, 400]);
+  for (const key of [result.key]) {
     const metadata = await sharp(Buffer.from(await driver.leer(key))).metadata();
     assert.equal(metadata.orientation, undefined);
     assert.equal(metadata.exif, undefined); assert.equal(metadata.xmp, undefined);
@@ -88,31 +101,27 @@ test("rechaza archivos vacíos, mayores de 5MB, falsos JPEG, SVG y datos corrupt
   assert.deepEqual(await readdir(directory), []);
 });
 
-test("eliminarImagen borra ambas versiones y es idempotente", async (context) => {
+test("eliminarImagen conserva compatibilidad con miniaturas antiguas y es idempotente", async (context) => {
   const directory = await temporaryDirectory(context);
   const driver = new LocalStorageDriver(directory);
   const service = new StorageService(new StorageRepository(driver));
   const image = await service.guardarImagen(asFile(await png(80, 80)), "odontologos");
-  await service.eliminarImagen(image.thumbKey);
+  const thumbKey = image.key.replace(".webp", "-thumb.webp");
+  await driver.guardar(thumbKey, await driver.leer(image.key));
+  await service.eliminarImagen(thumbKey);
   await assert.rejects(driver.leer(image.key), NotFoundError);
-  await assert.rejects(driver.leer(image.thumbKey), NotFoundError);
+  await assert.rejects(driver.leer(thumbKey), NotFoundError);
   await service.eliminarImagen(image.key);
 });
 
-test("si falla el thumbnail, limpia el archivo grande que acaba de crear", async (context) => {
-  const directory = await temporaryDirectory(context);
-  const driver = new LocalStorageDriver(directory);
-  let writtenKey = "";
+test("una subida realiza una sola escritura; propaga el fallo de almacenamiento", async () => {
+  let writes = 0;
   const repository = new StorageRepository({
-    async guardar(key, bytes) {
-      if (key.endsWith("-thumb.webp")) throw new InfrastructureError("Fallo de escritura simulado");
-      writtenKey = key; await driver.guardar(key, bytes);
-    },
-    leer: (key) => driver.leer(key), eliminar: (key) => driver.eliminar(key),
+    async guardar() { writes++; throw new InfrastructureError("Fallo de escritura simulado"); },
+    async leer() { throw new NotFoundError(); }, async eliminar() {},
   });
   await assert.rejects(new StorageService(repository).guardarImagen(asFile(await png(10, 10)), "odontologos"), InfrastructureError);
-  assert.ok(writtenKey);
-  await assert.rejects(driver.leer(writtenKey), NotFoundError);
+  assert.equal(writes, 1);
 });
 
 test("el driver nunca sobrescribe una clave existente", async (context) => {
@@ -164,15 +173,36 @@ test("no sirve un archivo que no sea WebP aunque tenga extensión webp", async (
   await assert.rejects(new StorageService(new StorageRepository(driver)).leerImagen(key), NotFoundError);
 });
 
-test("S3/R2 es un esqueleto explícito y no cae silenciosamente a disco", async (context) => {
+test("S3 sin configuración no cae silenciosamente a disco", async (context) => {
+  const previousBucket = process.env.S3_BUCKET;
+  delete process.env.S3_BUCKET;
+  context.after(() => { if (previousBucket === undefined) delete process.env.S3_BUCKET; else process.env.S3_BUCKET = previousBucket; });
   const previous = process.env.STORAGE_DRIVER;
   context.after(() => { if (previous === undefined) delete process.env.STORAGE_DRIVER; else process.env.STORAGE_DRIVER = previous; });
   process.env.STORAGE_DRIVER = "s3";
   const driver = crearStorageDriver();
   assert.ok(driver instanceof S3StorageDriver);
-  await assert.rejects(driver.guardar("odontologos/fixture.webp", new Uint8Array()), InfrastructureError);
-  await assert.rejects(driver.leer("odontologos/fixture.webp"), InfrastructureError);
-  await assert.rejects(driver.eliminar("odontologos/fixture.webp"), InfrastructureError);
+  const key = `odontologos/${randomUUID()}.webp`;
+  await assert.rejects(driver.guardar(key, new Uint8Array([1])), InfrastructureError);
+  await assert.rejects(driver.leer(key), InfrastructureError);
+  await assert.rejects(driver.eliminar(key), InfrastructureError);
   process.env.STORAGE_DRIVER = "otro";
   assert.throws(() => crearStorageDriver(), InfrastructureError);
+});
+
+test("perfil: guarda una ruta, protege propietario y limpia archivos si falla la BD", async (context) => {
+  const directory = await temporaryDirectory(context);
+  const driver = new LocalStorageDriver(directory);
+  const service = new StorageService(new StorageRepository(driver));
+  const owner = randomUUID();
+  const data = `data:image/png;base64,${(await png(80, 80)).toString("base64")}`;
+  const url = await service.conFotoPerfil(data, owner, false, async (value) => value);
+  assert.match(url!, new RegExp(`^/api/uploads/avatares/${owner}/`));
+  await assert.rejects(service.conFotoPerfil(url, randomUUID(), false, async () => null));
+  await assert.rejects(service.conFotoPerfil(url, owner, true, async () => null));
+  const before = await readdir(path.join(directory, "avatares", owner));
+  const failure = new Error("Fallo de BD simulado");
+  await assert.rejects(service.conFotoPerfil(data, owner, false, async () => { throw failure; }), failure);
+  assert.deepEqual(await readdir(path.join(directory, "avatares", owner)), before);
+  assert.equal(await service.conFotoPerfil(null, owner, false, async (value) => value), null);
 });

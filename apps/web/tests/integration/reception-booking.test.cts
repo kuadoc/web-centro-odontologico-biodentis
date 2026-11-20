@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import { Role } from "@biodentis/shared-types";
 import { AccessSessionRepository } from "@/modules/auth/access-session.repository";
 import { AppointmentRepository } from "@/modules/appointments/appointment.repository";
-import { AppointmentNotificationService } from "@/modules/appointments/appointment-notification.service";
+import { EmailOutboxService } from "@/modules/appointments/email-outbox.service";
 import { AvailabilityService } from "@/modules/availability/availability.service";
 import { CatalogAdminService } from "@/modules/service-catalog/catalog-admin.service";
 import { PatientService } from "@/modules/patients/patient.service";
@@ -24,7 +24,7 @@ const users = require("@/app/api/users/route") as typeof import("@/app/api/users
 
 const actorId = randomUUID();
 const patientId = randomUUID();
-const payload = { patientId, dentistId: randomUUID(), treatmentId: randomUUID(), date: "2030-01-07", startTime: "09:00", endTime: "09:30" };
+const payload = { patientId, dentistId: randomUUID(), treatmentId: randomUUID(), reason: "Consulta dental", hasPain: false, problemDuration: "Una semana", date: "2030-01-07", startTime: "09:00", endTime: "09:30" };
 
 function session(context: TestContext, role: Role) {
   context.mock.method(AccessSessionRepository.prototype, "findByJti", async () => ({
@@ -40,7 +40,7 @@ function request(path: string, body?: unknown) {
   });
 }
 function booking(context: TestContext) {
-  const notice = context.mock.method(AppointmentNotificationService.prototype, "sendBookingNotice", async () => true);
+  const notice = context.mock.method(EmailOutboxService.prototype, "tryDeliver", async () => true);
   context.mock.method(CatalogAdminService.prototype, "requireBookable", async () => ({}));
   context.mock.method(AvailabilityService.prototype, "getAvailableSlots", async () => [{ startTime: "09:00", endTime: "09:45" }]);
   context.mock.method(AppointmentRepository.prototype, "findConflicting", async () => null);

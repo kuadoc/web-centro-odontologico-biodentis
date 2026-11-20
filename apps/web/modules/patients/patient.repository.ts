@@ -1,4 +1,11 @@
+import { AuditService } from "@/modules/audit/audit.service";
+import { AuditRepository } from "@/modules/audit/audit.repository";
 import { prisma } from "@/lib/prisma";
+import { randomUUID, randomBytes } from "node:crypto";
+import bcrypt from "bcrypt";
+import { nextPatientCode } from "@/lib/patient-code";
+import { CreatePatientSchema } from "@biodentis/shared-validators";
+import type { z } from "zod";
 import type { Prisma } from "@prisma/client";
 
 export interface PatientListFilter {
@@ -33,6 +40,22 @@ const LIST_SELECT = {
 } satisfies Prisma.UserSelect;
 
 export class PatientRepository {
+  constructor(private readonly db: Prisma.TransactionClient = prisma) {}
+  withTransaction<T>(operation: (repository: PatientRepository) => Promise<T>) {
+    return prisma.$transaction((tx) => operation(new PatientRepository(tx)));
+  }
+  record(actorId: string, action: string, id: string, details: string) {
+    return new AuditService(new AuditRepository(this.db)).log(actorId, action, "User", id, details);
+  }
+
+  async createContact(data: z.infer<typeof CreatePatientSchema>) {
+    const { password, ...contact } = data;
+    return this.db.user.create({ data: {
+      ...contact, email: contact.email || `walkin-${randomUUID()}@patients.invalid`,
+      passwordHash: await bcrypt.hash(password || randomBytes(32).toString("hex"), 12),
+      role: "PATIENT", patientCode: await nextPatientCode(this.db),
+    }, select: { id: true, email: true, firstName: true, lastName: true, dni: true, patientCode: true } });
+  }
   /**
    * WHERE del directorio: busqueda libre + estado + tenencia de citas,
    * y el acotamiento por odontologo cuando aplica.
@@ -81,14 +104,14 @@ export class PatientRepository {
     const where = this.buildWhere(filter);
 
     const [items, total] = await Promise.all([
-      prisma.user.findMany({
+      this.db.user.findMany({
         where,
         select: { ...LIST_SELECT, _count: { select: { appointments: true } } },
         orderBy: { createdAt: "desc" },
         skip: filter.skip,
         take: filter.take,
       }),
-      prisma.user.count({ where }),
+      this.db.user.count({ where }),
     ]);
 
     return { items, total };
@@ -96,7 +119,7 @@ export class PatientRepository {
 
   /** Todos los pacientes que cumplen el filtro, sin paginar. Para exportar a CSV. */
   async findAllForExport(filter: PatientListFilter) {
-    return prisma.user.findMany({
+    return this.db.user.findMany({
       where: this.buildWhere(filter),
       select: { ...LIST_SELECT, _count: { select: { appointments: true } } },
       orderBy: { createdAt: "desc" },
@@ -105,7 +128,7 @@ export class PatientRepository {
 
   /** `attendedByDentistId` devuelve null si el paciente no es suyo: se traduce en 404. */
   async findById(id: string, attendedByDentistId?: string) {
-    return prisma.user.findFirst({
+    return this.db.user.findFirst({
       where: {
         id,
         role: "PATIENT",
@@ -127,9 +150,9 @@ export class PatientRepository {
     };
 
     const [total, active, newThisMonth] = await Promise.all([
-      prisma.user.count({ where: scope }),
-      prisma.user.count({ where: { ...scope, isActive: true } }),
-      prisma.user.count({ where: { ...scope, createdAt: { gte: monthStart } } }),
+      this.db.user.count({ where: scope }),
+      this.db.user.count({ where: { ...scope, isActive: true } }),
+      this.db.user.count({ where: { ...scope, createdAt: { gte: monthStart } } }),
     ]);
 
     return { total, active, inactive: total - active, newThisMonth };
@@ -171,7 +194,7 @@ export class PatientRepository {
   }
 
   async update(id: string, data: Prisma.UserUpdateInput) {
-    return prisma.user.update({
+    return this.db.user.update({
       where: { id },
       data: {
         ...data,
@@ -184,6 +207,6 @@ export class PatientRepository {
   }
 
   async findByEmail(email: string) {
-    return prisma.user.findUnique({ where: { email }, select: { id: true } });
+    return this.db.user.findUnique({ where: { email }, select: { id: true } });
   }
 }

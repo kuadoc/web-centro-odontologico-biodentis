@@ -578,7 +578,7 @@ export default function PatientsPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="create-email">
-                Correo Electrónico *
+                Correo electrónico (opcional)
               </label>
               <Input
                 id="create-email"
@@ -592,7 +592,7 @@ export default function PatientsPage() {
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="create-password">
-                Contraseña inicial *
+                Contraseña para portal (opcional)
               </label>
               <Input
                 id="create-password"
@@ -601,7 +601,7 @@ export default function PatientsPage() {
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setCreateForm((p) => ({ ...p, password: e.target.value }))
                 }
-                placeholder="Mínimo 8 caracteres"
+                placeholder="Vacía para registro presencial sin credenciales"
               />
             </div>
           </div>

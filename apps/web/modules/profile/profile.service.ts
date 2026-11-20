@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import { ProfileRepository } from "./profile.repository";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { hashToken } from "@/lib/auth";
+import { StorageService } from "@/modules/storage/storage.service";
 import {
   UpdateProfileSchema,
   UpdatePasswordSchema,
@@ -87,13 +88,18 @@ export class ProfileService {
   /** Actualiza los datos de contacto que el propio usuario puede editar. */
   async updateMyProfile(userId: string, input: unknown) {
     const parsed = UpdateProfileSchema.parse(input);
-    const user = await profileRepository.findUser(userId);
-    if (!user) throw new NotFoundError("Usuario no encontrado");
+    const apply = async (repository: ProfileRepository) => {
+      const user = await repository.findUser(userId);
+      if (!user) throw new NotFoundError("Usuario no encontrado");
 
-    const updated = await profileRepository.updateUser(userId, normalize(parsed));
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { passwordHash, ...safeUser } = updated;
-    return safeUser;
+      const updated = await new StorageService().conFotoPerfil(parsed.avatarUrl, userId, user.role === "DENTIST", (avatarUrl) =>
+        repository.updateUser(userId, normalize({ ...parsed, avatarUrl })), user.avatarUrl,
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { passwordHash, ...safeUser } = updated;
+      return safeUser;
+    };
+    return parsed.avatarUrl === undefined ? apply(profileRepository) : profileRepository.withLockedUser(userId, apply);
   }
 
   /**
@@ -116,11 +122,7 @@ export class ProfileService {
     if (!valid) throw new ValidationError("Contraseña actual incorrecta");
 
     const passwordHash = await bcrypt.hash(parsed.newPassword, 10);
-    const { prisma } = await import("@/lib/prisma");
-    await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
-
-    // Cambiar la contrasena invalida las demas sesiones abiertas.
-    const revoked = await profileRepository.revokeSessionsExcept(userId, null);
+    const revoked = await profileRepository.changePassword(userId, passwordHash);
     return { success: true, revokedSessions: revoked };
   }
 

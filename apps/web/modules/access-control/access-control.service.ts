@@ -15,7 +15,7 @@ export class AccessControlService {
       case Role.DENTIST:
         // Odontologo solo puede ver pacientes con quienes tiene citas asignadas
         const hasAppointments = await prisma.appointment.findFirst({
-          where: { dentistId: requesterId, patientId: patientId },
+          where: { dentist: { userId: requesterId }, patientId, status: "COMPLETED" },
         });
         if (!hasAppointments) {
           throw new AuthorizationError("No tienes citas con este paciente");

@@ -5,6 +5,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { AuditService } from "@/modules/audit/audit.service";
 import { AuditRepository } from "@/modules/audit/audit.repository";
 import { withScheduleTransaction } from "@/modules/appointments/schedule-transaction.repository";
+import { CancellationRepository } from "@/modules/appointments/cancellation.repository";
 
 export class UserRepository {
   constructor(
@@ -12,8 +13,21 @@ export class UserRepository {
     private readonly transactions: Pick<PrismaClient, "$transaction"> = prisma,
   ) {}
 
-  withTransaction<T>(operation: (repository: UserRepository) => Promise<T>) {
-    return withScheduleTransaction(this.transactions, (tx) => operation(new UserRepository(tx, this.transactions)));
+  withTransaction<T>(operation: (repository: UserRepository) => Promise<T>, timeout?: number) {
+    return withScheduleTransaction(this.transactions, (tx) => operation(new UserRepository(tx, this.transactions)), undefined, timeout);
+  }
+
+  withLockedAvatar<T>(userId: string, operation: (repository: UserRepository) => Promise<T>, protectSchedule = false) {
+    if (protectSchedule) {
+      return this.withTransaction(async (repository) => {
+        await repository.db.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+        return operation(repository);
+      }, 30_000);
+    }
+    return this.transactions.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      return operation(new UserRepository(tx, this.transactions));
+    }, { maxWait: 10_000, timeout: 30_000 });
   }
 
   async countBlockingAppointments(userId: string) {
@@ -30,6 +44,10 @@ export class UserRepository {
 
   logStateChange(actorId: string, userId: string, isActive: boolean) {
     return new AuditService(new AuditRepository(this.db)).log(actorId, isActive ? "ACTIVATE_USER" : "DEACTIVATE_USER", "User", userId);
+  }
+  async cancelPendingForDentist(userId: string, actorId: string) {
+    const appointments = await this.db.appointment.findMany({ where: { dentist: { userId }, status: "PENDING" }, select: { id: true } });
+    return new CancellationRepository(this.db, this.transactions).cancelPendingAutomatically(appointments.map(({ id }) => id), actorId, "Cancelación automática por desactivación del odontólogo asignado.");
   }
 
   async findById(id: string) {
@@ -60,6 +78,7 @@ export class UserRepository {
   }
 
   async create(data: {
+    id?: string;
     email: string;
     passwordHash: string;
     role: Role;
@@ -71,7 +90,7 @@ export class UserRepository {
     dentistProfile?: { specialty: string; licenseNumber?: string | null; university?: string | null };
   }) {
     // Los pacientes reciben su codigo visible (#PAC-0001) al darse de alta.
-    const patientCode = data.role === "PATIENT" ? await nextPatientCode() : undefined;
+    const patientCode = data.role === "PATIENT" ? await nextPatientCode(this.db) : undefined;
     const { dentistProfile, ...userData } = data;
     return this.db.user.create({ data: { ...userData, patientCode, ...(dentistProfile ? { dentistProfile: { create: dentistProfile } } : {}) } });
   }

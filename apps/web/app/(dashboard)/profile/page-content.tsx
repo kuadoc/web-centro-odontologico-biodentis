@@ -3,7 +3,7 @@
 import { ROLE_LABELS } from "@/lib/role-labels";
 import { formatDateTime } from "@workspace/ui/lib/utils";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Card, CardContent } from "@workspace/ui/components/card";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
@@ -62,6 +62,9 @@ export default function ProfilePage() {
   const dentist = profile?.dentist ?? null;
 
   const [contactForm, setContactForm] = useState({ phone: "", secondaryPhone: "" });
+  const [pendingAvatar, setPendingAvatar] = useState<string | null | undefined>(undefined);
+  const [photoProcessing, setPhotoProcessing] = useState(false);
+  const savingProfile = useRef(false);
   /**
    * Id del usuario ya volcado al formulario.
    *
@@ -78,26 +81,33 @@ export default function ProfilePage() {
   if (user && syncedUserId !== user.id) {
     setSyncedUserId(user.id);
     setContactForm({ phone: user.phone ?? "", secondaryPhone: user.secondaryPhone ?? "" });
+    setPendingAvatar(undefined);
   }
 
   const strength = useMemo(() => passwordStrength(pwdForm.next), [pwdForm.next]);
 
   /** `null` quita la foto; el string es el data URL ya recortado por el navegador. */
-  const handleAvatarChange = async (dataUrl: string | null) => {
-    await updateProfile.mutateAsync({ avatarUrl: dataUrl });
+  const handleAvatarChange = (dataUrl: string | null) => {
+    setPendingAvatar(dataUrl);
   };
 
   const handleSaveContact = async () => {
+    if (savingProfile.current || photoProcessing) return;
+    savingProfile.current = true;
     setContactMsg(null);
     try {
       await updateProfile.mutateAsync({
         phone: contactForm.phone,
         secondaryPhone: contactForm.secondaryPhone,
+        ...(pendingAvatar !== undefined ? { avatarUrl: pendingAvatar } : {}),
       });
+      setPendingAvatar(undefined);
       setContactMsg({ type: "ok", text: "Cambios guardados correctamente" });
       setTimeout(() => setContactMsg(null), 2500);
     } catch (e) {
       setContactMsg({ type: "err", text: e instanceof Error ? e.message : "Error al guardar" });
+    } finally {
+      savingProfile.current = false;
     }
   };
 
@@ -186,14 +196,27 @@ export default function ProfilePage() {
       <Card>
         <CardContent className="p-6 flex flex-col gap-6">
           <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-            <AvatarPicker
-              portrait={isDentist}
-              firstName={user.firstName}
-              lastName={user.lastName}
-              avatarUrl={user.avatarUrl}
-              isSaving={updateProfile.isPending}
-              onChange={handleAvatarChange}
-            />
+            <div className="flex flex-col items-center gap-2">
+              <AvatarPicker
+                portrait={isDentist}
+                firstName={user.firstName}
+                lastName={user.lastName}
+                avatarUrl={pendingAvatar === undefined ? user.avatarUrl : pendingAvatar}
+                isSaving={updateProfile.isPending}
+                onProcessingChange={setPhotoProcessing}
+                onChange={handleAvatarChange}
+              />
+              {pendingAvatar !== undefined && (
+                <>
+                  <p className="max-w-48 text-center text-xs text-muted-foreground">Foto pendiente. Pulsa Guardar cambios para confirmar.</p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" isDisabled={photoProcessing || updateProfile.isPending} onPress={() => setPendingAvatar(undefined)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
             <div className="flex flex-col gap-2 flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-2xl font-bold tracking-tight truncate">
@@ -282,6 +305,20 @@ export default function ProfilePage() {
                     <Info className="h-3 w-3" /> Contacta al administrador para modificar el correo institucional.
                   </p>
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="dni" className="text-xs font-semibold flex justify-between">
+                    <span>DNI</span>
+                    <span className="font-normal text-muted-foreground">Solo lectura</span>
+                  </Label>
+                  <div className="relative">
+                    <BadgeCheck className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input id="dni" type="text" className="pl-8 pr-8 bg-muted" disabled value={user.dni ?? NOT_SET} />
+                    <Lock className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Info className="h-3 w-3" /> El DNI no se puede modificar. Contacta al administrador si necesitas corregirlo.
+                  </p>
+                </div>
 
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="alt-phone" className="text-xs font-semibold">
@@ -294,12 +331,12 @@ export default function ProfilePage() {
                 </div>
 
                 {contactMsg && (
-                  <p className={`text-xs ${contactMsg.type === "ok" ? "text-green-600" : "text-destructive"}`}>{contactMsg.text}</p>
+                  <p role={contactMsg.type === "err" ? "alert" : "status"} className={`text-xs ${contactMsg.type === "ok" ? "text-green-600" : "text-destructive"}`}>{contactMsg.text}</p>
                 )}
               </div>
 
               <div className="flex justify-end pt-2">
-                <Button size="sm" onPress={handleSaveContact} isDisabled={updateProfile.isPending}>
+                <Button size="sm" onPress={handleSaveContact} isDisabled={photoProcessing || updateProfile.isPending}>
                   <Save className="h-4 w-4" />
                   {updateProfile.isPending ? "Guardando..." : "Guardar cambios"}
                 </Button>

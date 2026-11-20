@@ -2,6 +2,10 @@
 
 Plataforma web para la gestion de citas e historial clinico de un consultorio odontologico.
 
+Para incorporar desarrolladores con datos locales completos, sigue la
+[guía del seed local v2](apps/web/prisma/SEED-LOCAL.md), con configuración,
+migraciones, cuentas por rol y escenarios de prueba.
+
 ## Requisitos Previos
 
 - [Node.js](https://nodejs.org/) >= 20
@@ -23,7 +27,7 @@ web-centro-odontologico-biodentis/
 │   └── config/               ← Configuracion compartida (tsconfig, eslint, prettier)
 │
 ├── docker-compose.yml        ← PostgreSQL + Backend + Frontend
-└── turbo.json                ← Configuracion de Turborepo
+└── turbo.json                ← Configuracion de Turborepo.
 ```
 
 ## Instalacion

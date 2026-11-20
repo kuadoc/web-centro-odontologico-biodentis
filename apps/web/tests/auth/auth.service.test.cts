@@ -12,6 +12,7 @@ const prisma = {
   user: { findUnique: unmocked, findFirst: unmocked, create: unmocked },
   refreshToken: { findUnique: unmocked, create: unmocked, update: unmocked, updateMany: unmocked },
   $transaction: unmocked,
+  $queryRaw: unmocked,
 };
 (globalThis as unknown as { prisma: unknown }).prisma = prisma;
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- Cargar después de inyectar BD y secretos de prueba.
@@ -28,7 +29,7 @@ type Session = {
   revokedAt: Date | null; replacedByToken?: string;
 };
 const credentials = { email: "patient@example.test", password: "valid-password" };
-const registration = { ...credentials, firstName: "Ana", lastName: "Pérez", phone: "999888777" };
+const registration = { ...credentials, firstName: "Ana", lastName: "Pérez", dni: "01234567", phone: "999888777" };
 
 function setup(context: TestContext) {
   context.mock.timers.enable({ apis: ["Date"], now: new Date("2030-01-07T15:00:00Z") });
@@ -41,7 +42,8 @@ function setup(context: TestContext) {
     state.events.push(where.patientCode ? "patient-code" : "find-user");
     return where.patientCode ? null : state.user;
   });
-  context.mock.method(prisma.user, "findFirst", async () => {
+  context.mock.method(prisma.user, "findFirst", async (query?: { where?: { email?: unknown } }) => {
+    if (query?.where?.email) return state.user;
     state.events.push("last-patient-code");
     return { patientCode: "#PAC-0007" };
   });
@@ -78,8 +80,17 @@ function setup(context: TestContext) {
     }
     return { count };
   });
-  const transaction = context.mock.method(prisma, "$transaction", async (operations: Promise<unknown>[]) => {
+  context.mock.method(prisma, "$queryRaw", async () => {
+    state.events.push("patient-sequence");
+    return [{ value: 8n }];
+  });
+  const transaction = context.mock.method(prisma, "$transaction", async (operations: Promise<unknown>[] | ((tx: typeof prisma) => Promise<unknown>)) => {
     state.events.push("transaction");
+    if (typeof operations === "function") {
+      const snapshot = structuredClone({ user: state.user, sessions: state.sessions });
+      try { return await operations(prisma); }
+      catch (error) { state.user = snapshot.user; state.sessions = snapshot.sessions; throw error; }
+    }
     return Promise.all(operations);
   });
   const hash = context.mock.method(bcrypt, "hash", async () => "hashed-password");
@@ -109,12 +120,30 @@ test("AUTH-01 | registro: fija PATIENT, genera código y devuelve usuario públi
   assert.deepEqual(result.user, { id: "patient-id", email: registration.email, firstName: "Ana", lastName: "Pérez", role: "PATIENT" });
   assert.deepEqual(createUser.mock.calls[0]?.arguments, [{ data: {
     email: registration.email, passwordHash: "hashed-password", role: "PATIENT", patientCode: "#PAC-0008",
-    firstName: "Ana", lastName: "Pérez", phone: registration.phone,
+    firstName: "Ana", lastName: "Pérez", dni: registration.dni, phone: registration.phone,
   } }]);
   assert.deepEqual(hash.mock.calls[0]?.arguments, [registration.password, 12]);
-  assert.deepEqual(state.events, ["find-user", "last-patient-code", "patient-code", "create-user", "create-token"]);
+  assert.deepEqual(state.events, ["find-user", "transaction", "patient-sequence", "patient-code", "create-user", "create-token"]);
   assert.equal(state.sessions.length, 1);
   assertSession(result, state.sessions[0]!);
+});
+
+for (const dni of [undefined, null, "", "1234567", "123456789", "ABCDEFGH", 12345678]) {
+  test(`registro: DNI ${JSON.stringify(dni)} se rechaza antes de consultar BD`, async (context) => {
+    const { service, state, createUser, hash } = setup(context);
+    await assert.rejects(service.register({ ...registration, dni }), ZodError);
+    assert.deepEqual(state.events, []);
+    assert.equal(createUser.mock.callCount(), 0);
+    assert.equal(hash.mock.callCount(), 0);
+  });
+}
+
+test("registro: normaliza el DNI y conserva sus ceros iniciales al persistir", async (context) => {
+  const { service, state, createUser } = setup(context);
+  state.user = null;
+  await service.register({ ...registration, dni: " 01234567 " });
+  const args = createUser.mock.calls[0]!.arguments[0] as { data: { dni: string } };
+  assert.equal(args.data.dni, "01234567");
 });
 
 test("AUTH-02 | registro: email duplicado conserva conflicto 409 sin escrituras", async (context) => {

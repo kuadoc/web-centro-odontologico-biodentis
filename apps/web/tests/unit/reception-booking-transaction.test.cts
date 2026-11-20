@@ -26,6 +26,7 @@ test("la reserva confirmada y su responsable se auditan en la misma transacción
   let saved = false;
   let auditFails = true;
   const tx = {
+    emailOutbox: { upsert: async () => ({}) },
     dentist: { findUnique: async () => ({ user: { role: "DENTIST", isActive: true } }) },
     scheduleException: { findFirst: async () => null },
     availability: { findMany: async () => [{ startTime: "08:00", endTime: "18:00" }] },

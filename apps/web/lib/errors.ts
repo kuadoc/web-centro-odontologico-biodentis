@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client";
+
 export class AuthenticationError extends Error {
   statusCode = 401;
   constructor(message = "No autenticado") {
@@ -56,6 +58,9 @@ export class InfrastructureError extends Error {
 }
 
 export function handleApiError(error: unknown): Response {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    return Response.json({ error: "Ya existe un registro con esos datos únicos. Revisa el correo o DNI." }, { status: 409 });
+  }
   if (
     error instanceof AuthenticationError ||
     error instanceof AuthorizationError ||

@@ -53,15 +53,22 @@ export class ReassignmentService {
   async report(input: unknown): Promise<ReassignmentReport> {
     const { page, pageSize } = ReassignmentReportQuerySchema.parse(input);
     const { items, total } = await this.repository.report(page, pageSize);
-    return {
-      items: items.map((entry) => {
-        try {
-          const detail = ReassignmentAuditDetailSchema.parse(JSON.parse(entry.details ?? ""));
-          return { ...detail, id: entry.id, createdAt: entry.createdAt.toISOString() };
-        } catch {
-          throw new InfrastructureError("No se pudo leer un registro de reasignación. Contacta al administrador.");
-        }
-      }), total, page, pageSize,
-    };
+    return { items: this.reportItems(items), total, page, pageSize };
+  }
+
+  async exportItems() {
+    const { items } = await this.repository.report(1);
+    return this.reportItems(items);
+  }
+
+  private reportItems(items: Awaited<ReturnType<ReassignmentRepository["report"]>>["items"]) {
+    return items.map((entry) => {
+      try {
+        const detail = ReassignmentAuditDetailSchema.parse(JSON.parse(entry.details ?? ""));
+        return { ...detail, id: entry.id, createdAt: entry.createdAt.toISOString() };
+      } catch {
+        throw new InfrastructureError("No se pudo leer un registro de reasignación. Contacta al administrador.");
+      }
+    });
   }
 }

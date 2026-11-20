@@ -8,6 +8,8 @@ const unmocked = async () => { throw new Error("Acceso a BD sin simular"); };
 const prisma = {
   user: { findUnique: unmocked, findFirst: unmocked, findMany: unmocked, count: unmocked, create: unmocked, update: unmocked },
   appointment: { findMany: unmocked, findUnique: unmocked },
+  $transaction: async (operation: (tx: unknown) => Promise<unknown>) => operation(prisma),
+  $queryRaw: async () => [{ value: 1n }],
 };
 (globalThis as unknown as { prisma: unknown }).prisma = prisma;
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- Inyectar BD falsa antes de cargar servicios y repositorios.
@@ -20,7 +22,7 @@ const { AppointmentRepository } = require("@/modules/appointments/appointment.re
 const { AuditService } = require("@/modules/audit/audit.service") as typeof import("@/modules/audit/audit.service");
 
 const patient = { id: "patient-id", email: "patient@example.test", firstName: "Ana", lastName: "Pérez", patientCode: "#PAC-0001", dni: "01234567" };
-const registration = { email: patient.email, firstName: patient.firstName, lastName: patient.lastName, password: "test-password" };
+const registration = { email: patient.email, firstName: patient.firstName, lastName: patient.lastName, phone: "900123456", password: "test-password" };
 const reason = "Actualización de datos del paciente";
 
 test("DNI: conserva ceros iniciales y permite pacientes antiguos sin documento", () => {

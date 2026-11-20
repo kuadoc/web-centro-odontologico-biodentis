@@ -8,13 +8,13 @@ import { Pagination } from "@workspace/ui/components/pagination";
 import { usePagination } from "@workspace/ui/hooks/use-pagination";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/components/ui/toast-provider";
+import { CreateDentalUnitDialog } from "@/components/config/create-dental-unit-dialog";
 import { formatDateTime } from "@workspace/ui/lib/utils";
 import { ApiError } from "@/lib/api-client";
 import {
   useFullConfig,
   useUpdateClinic,
   useDentalUnits,
-  useCreateDentalUnit,
   useUpdateDentalUnit,
   useDeleteDentalUnit,
   useEmailTemplates,
@@ -115,7 +115,7 @@ function GeneralTab() {
   const toast = useToast();
   const { data: config, isLoading } = useFullConfig();
   const updateClinic = useUpdateClinic();
-  const createUnit = useCreateDentalUnit();
+  const [isCreatingUnit, setIsCreatingUnit] = useState(false);
   const updateUnit = useUpdateDentalUnit();
   const deleteUnit = useDeleteDentalUnit();
 
@@ -234,8 +234,13 @@ function GeneralTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Infraestructura y Boxes Dentales</CardTitle>
-          <CardDescription>Configuracion de unidades clinicas asignables para citas y procedimientos.</CardDescription>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle>Infraestructura y Boxes Dentales</CardTitle>
+              <CardDescription>Configuracion de unidades clinicas asignables para citas y procedimientos.</CardDescription>
+            </div>
+            <Button size="sm" onPress={() => setIsCreatingUnit(true)}>Añadir unidad</Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -247,6 +252,7 @@ function GeneralTab() {
                   <div>
                     <span className="text-xs text-muted-foreground font-medium">{unit.type}</span>
                     <p className="text-xl font-bold mt-0.5">{unit.name}</p>
+                    {unit.description && <p className="mt-1 text-xs text-muted-foreground">{unit.description}</p>}
                     <span className={`text-xs font-medium ${unit.status === "ACTIVE" ? "text-emerald-600" : unit.status === "MAINTENANCE" ? "text-amber-600" : "text-muted-foreground"}`}>
                       {unit.status === "ACTIVE" ? "Operativo" : unit.status === "MAINTENANCE" ? "Mantenimiento" : "Inactivo"}
                     </span>
@@ -263,6 +269,7 @@ function GeneralTab() {
           </div>
         </CardContent>
       </Card>
+      {isCreatingUnit && <CreateDentalUnitDialog onClose={() => setIsCreatingUnit(false)} />}
     </>
   );
 }

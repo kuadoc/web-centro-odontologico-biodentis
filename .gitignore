@@ -57,6 +57,9 @@ CLAUDE.md
 
 .pnpm-store
 
+# Respaldos locales de BD: contienen datos y nunca se versionan.
+.backups/
+
 # Evidencias de pruebas E2E (Selenium)
 apps/web/tests/e2e/evidencias/
 **/evidencias/*.png

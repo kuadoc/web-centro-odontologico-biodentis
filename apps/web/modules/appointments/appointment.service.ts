@@ -1,5 +1,5 @@
 import { AppointmentRepository } from "./appointment.repository";
-import { AppointmentNotificationService } from "./appointment-notification.service";
+import { EmailOutboxService } from "./email-outbox.service";
 import { AvailabilityService } from "@/modules/availability/availability.service";
 import {
   RequestAppointmentSchema,
@@ -12,7 +12,6 @@ import {
   DENTIST_VISIBLE_STATUSES,
 } from "@biodentis/shared-validators";
 import { AppointmentStatus, Role } from "@biodentis/shared-types";
-import { AuditService } from "@/modules/audit/audit.service";
 import { CatalogAdminService } from "@/modules/service-catalog/catalog-admin.service";
 import { ValidationError, DomainError, ScheduleConflictError, NotFoundError, AuthorizationError } from "@/lib/errors";
 import type { z } from "zod";
@@ -39,13 +38,14 @@ export class AppointmentService {
       statuses = [filters.status as AppointmentStatus];
     }
 
-    return appointmentRepository.findMany({
+    const appointments = await appointmentRepository.findMany({
       patientId: filters.patientId,
       dentistId: filters.dentistId,
       statuses,
       from: filters.from ? new Date(filters.from) : undefined,
       to: filters.to ? new Date(filters.to) : undefined,
     });
+    return viewerRole === Role.RECEPTIONIST ? appointments.map((appointment) => ({ ...appointment, clinicalRecord: null })) : appointments;
   }
 
   async getById(id: string) {
@@ -61,6 +61,9 @@ export class AppointmentService {
   async create(data: unknown, patientId: string, actorRole?: Role, actorId?: string) {
     const parsed = RequestAppointmentSchema.parse(data);
     const bookingForPatient = this.validateBookingActor(parsed, actorRole, actorId);
+    if (actorRole === Role.PATIENT && (!parsed.reason || typeof parsed.hasPain !== "boolean" || !parsed.problemDuration)) {
+      throw new ValidationError("Completa el motivo, la presencia de dolor y el tiempo del problema.");
+    }
     parsed.endTime = await this.resolveBookingEndTime(parsed, actorRole);
     await this.requireBookingTimeAvailable(parsed);
 
@@ -70,12 +73,12 @@ export class AppointmentService {
       date: new Date(parsed.date),
       startTime: parsed.startTime,
       endTime: parsed.endTime,
-      notes: parsed.notes,
+      notes: actorRole === Role.PATIENT ? `Motivo: ${parsed.reason}\nDolor: ${parsed.hasPain ? "Sí" : "No"}\nTiempo del problema: ${parsed.problemDuration}${parsed.notes ? `\nNotas: ${parsed.notes}` : ""}` : parsed.notes,
       treatmentId: parsed.treatmentId,
       // Las reservas gestionadas por Recepción ya fueron revisadas y confirmadas.
       status: actorRole === Role.RECEPTIONIST ? AppointmentStatus.CONFIRMED : AppointmentStatus.PENDING,
     }, actorRole === Role.RECEPTIONIST ? actorId : undefined);
-    await new AppointmentNotificationService().sendBookingNotice(appointment.id);
+    await new EmailOutboxService().tryDeliver(appointment.id);
     return appointment;
   }
 
@@ -141,7 +144,7 @@ export class AppointmentService {
       throw new DomainError("Solo se pueden reprogramar citas pendientes o confirmadas sin atención registrada.", 409);
     }
 
-    if (!canCancelOrReschedule(appointment.date, appointment.startTime)) {
+    if (actor.role === Role.PATIENT && !canCancelOrReschedule(appointment.date, appointment.startTime)) {
       throw new DomainError("No se puede reprogramar una cita con menos de 24 horas de anticipación");
     }
 
@@ -162,7 +165,7 @@ export class AppointmentService {
       throw new ScheduleConflictError("El odontólogo ya tiene una cita en ese horario");
     }
 
-    return appointmentRepository.reschedule(id, new Date(parsed.date), parsed.startTime, parsed.endTime);
+    return appointmentRepository.reschedule(id, new Date(parsed.date), parsed.startTime, parsed.endTime, actor);
   }
 
   /**
@@ -174,6 +177,9 @@ export class AppointmentService {
     if (!appointment) throw new NotFoundError("Cita no encontrada");
 
     const parsed = AppointmentStatusUpdateSchema.parse(data);
+    if (parsed.status === AppointmentStatus.COMPLETED && actor?.role !== Role.DENTIST) {
+      throw new AuthorizationError("Solo el odontólogo asignado puede marcar la cita como atendida.");
+    }
 
     if (actor?.role === Role.DENTIST) {
       if (!actor.dentistId || appointment.dentistId !== actor.dentistId) {
@@ -191,14 +197,14 @@ export class AppointmentService {
       throw new DomainError(`Transición inválida: ${appointment.status} -> ${parsed.status}`);
     }
 
-    return appointmentRepository.updateStatus(id, parsed.status as AppointmentStatus);
+    return appointmentRepository.updateStatus(id, parsed.status as AppointmentStatus, parsed.status === AppointmentStatus.COMPLETED ? actor?.dentistId : undefined);
   }
 
-  /** Recepción o el odontólogo a cargo registran la nota y completan una cita confirmada. */
+  /** Solo el odontólogo asignado registra la nota y completa la cita. */
   async completeWithClinicalNote(id: string, data: unknown, actor: { role: Role; userId: string; dentistId?: string }) {
     const appointment = await appointmentRepository.findById(id);
     if (!appointment) throw new NotFoundError("Cita no encontrada");
-    if (actor.role !== Role.RECEPTIONIST && actor.role !== Role.DENTIST) {
+    if (actor.role !== Role.DENTIST) {
       throw new AuthorizationError("No tienes permiso para registrar notas clínicas");
     }
     if (actor.role === Role.DENTIST && (!actor.dentistId || appointment.dentistId !== actor.dentistId)) {
@@ -212,8 +218,6 @@ export class AppointmentService {
     const { diagnosis, treatment, nextControl } = CompleteAppointmentSchema.parse(data);
     const controls = { none: "Sin control indicado", "1m": "En 1 mes", "3m": "En 3 meses", "6m": "En 6 meses" };
     const notes = `Diagnóstico: ${diagnosis}\nTratamiento: ${treatment}${nextControl ? `\nPróximo control: ${controls[nextControl]}` : ""}`;
-    const completed = await appointmentRepository.completeWithRecord(id, appointment.patientId, appointment.dentistId, notes);
-    await new AuditService().log(actor.userId, "CREATE_CLINICAL_RECORD", "Appointment", id, `Registro clínico y cita completada por ${actor.role}`);
-    return completed;
+    return appointmentRepository.completeWithRecord(id, appointment.patientId, appointment.dentistId, notes, actor.userId);
   }
 }

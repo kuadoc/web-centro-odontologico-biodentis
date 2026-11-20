@@ -1,8 +1,18 @@
 import { z } from "zod";
 import { RoleSchema, AppointmentStatusSchema, DentalUnitTypeSchema, DentalUnitStatusSchema, ExceptionScopeSchema, ExceptionStatusSchema, SettingTypeSchema } from "./enums";
 
+export const ContactPhoneSchema = z.string().trim().min(6, "Teléfono demasiado corto").max(25, "Teléfono demasiado largo").regex(/^[+()\d\s-]+$/, "Teléfono inválido").refine((value) => value.replace(/\D/g, "").length >= 6, "El teléfono debe contener al menos 6 dígitos");
+
 const storageUuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 export const StorageDriverSchema = z.enum(["local", "s3"]);
+export const S3ConfigSchema = z.object({
+  imagePrefix: z.string().regex(/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*$/, "Prefijo de imágenes no válido").default("imagen"),
+  endpoint: z.url().refine((value) => new URL(value).protocol === "https:", "S3 requiere HTTPS"),
+  region: z.string().trim().min(1),
+  bucket: z.string().trim().min(1),
+  accessKeyId: z.string().trim().min(1),
+  secretAccessKey: z.string().trim().min(1),
+});
 export const GuardarImagenCarpetaSchema = z.string().regex(
   new RegExp(`^(?:odontologos|avatares/${storageUuid})$`),
   "La carpeta debe ser odontologos o avatares/<UUID del propietario>",
@@ -15,21 +25,33 @@ export const GuardarImagenArchivoSchema = z.instanceof(File, { error: "Adjunta u
   .refine((file) => file.size > 0, "La imagen está vacía")
   .refine((file) => file.size <= 5 * 1024 * 1024, "La imagen supera el máximo de 5 MB");
 
+export const DniSchema = z.string().trim()
+  .regex(/^\d{8}$/, "El DNI debe contener exactamente 8 dígitos");
+
+export const PatientDniSchema = DniSchema
+  .or(z.string().trim().length(0).transform(() => null))
+  .nullable()
+  .optional();
+
 export const RegisterSchema = z.object({
-  email: z.string().email("Email inválido"),
+  email: z.string().trim().toLowerCase().email("Email inválido"),
   password: z.string().min(8, "Mínimo 8 caracteres"),
   firstName: z.string().min(1, "Nombre requerido"),
   lastName: z.string().min(1, "Apellido requerido"),
-  phone: z.string().optional(),
+  dni: DniSchema,
+  phone: ContactPhoneSchema.or(z.literal("")).optional(),
   // role ELIMINADO — siempre PATIENT. Asignacion de roles via POST /api/users (admin only).
 });
 
 export const LoginSchema = z.object({
-  email: z.string().email("Email inválido"),
+  email: z.string().trim().toLowerCase().email("Email inválido"),
   password: z.string().min(8, "Mínimo 8 caracteres"),
 });
 
 export const RequestAppointmentSchema = z.object({
+  reason: z.string().trim().min(3, "Describe el motivo de consulta").max(1000).optional(),
+  hasPain: z.boolean().optional(),
+  problemDuration: z.string().trim().min(1, "Indica desde cuándo tienes el problema").max(200).optional(),
   treatmentId: z.string().uuid().optional(),
   dentistId: z.string().uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -89,6 +111,39 @@ export const ReviewAppointmentCancellationSchema = z.object({
 });
 export const CancellationStateSchema = z.enum(["REQUESTED", "APPROVED", "REJECTED"]);
 export const CancellationReportQuerySchema = ReassignmentReportQuerySchema.extend({ state: CancellationStateSchema.optional() });
+export const ExportAppointmentReportSchema = z.object({ state: CancellationStateSchema.optional() });
+export const AppointmentAnalyticsQuerySchema = z.object({
+  period: z.enum(["day", "week", "month", "year", "custom"]).default("month"),
+  date: z.iso.date().optional(), start: z.iso.date().optional(), end: z.iso.date().optional(),
+  dentistId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+}).superRefine((value, ctx) => {
+  if (value.period === "custom" && (!value.start || !value.end)) ctx.addIssue({ code: "custom", message: "Indica la fecha inicial y final", path: ["start"] });
+});
+const ReportRankingSchema = z.object({ id: z.string(), name: z.string(), completed: z.number(), patients: z.number() });
+const ReportReminderSchema = z.object({
+  dueAt: z.string().nullable(), state: z.string(), label: z.string(), attempts: z.number(),
+  nextAttemptAt: z.string().nullable(), acceptedAt: z.string().nullable(),
+});
+const ReportAppointmentSchema = z.object({
+  id: z.string(), patientId: z.string(), patient: z.string(), dentistId: z.string(), dentist: z.string(),
+  service: z.string(), specialty: z.string(), date: z.string(), startTime: z.string(), endTime: z.string(),
+  status: AppointmentStatusSchema, reminder: ReportReminderSchema,
+});
+export const AppointmentAnalyticsSchema = z.object({
+  start: z.string(), end: z.string(), generatedAt: z.string(), granularity: z.enum(["day", "week", "month"]),
+  summary: z.object({ total: z.number(), completed: z.number(), scheduled: z.number(), pending: z.number(), confirmed: z.number(), cancelled: z.number(), noShow: z.number(), patients: z.number(), completedAllTime: z.number(), attendanceRate: z.number() }),
+  timeline: z.array(z.object({ date: z.string(), total: z.number(), completed: z.number(), cancelled: z.number(), noShow: z.number() })),
+  dentists: z.array(ReportRankingSchema), specialties: z.array(ReportRankingSchema), services: z.array(ReportRankingSchema),
+  dentistOptions: z.array(z.object({ id: z.string(), name: z.string() })),
+  appointments: z.array(ReportAppointmentSchema), upcoming: z.array(ReportAppointmentSchema),
+  total: z.number(), upcomingTotal: z.number(), page: z.number(), pageSize: z.number(),
+  reminderSummary: z.object({ scheduled: z.number(), queued: z.number(), accepted: z.number(), failed: z.number(), suppressed: z.number(), late: z.number() }),
+  worker: z.object({ startedAt: z.string(), finishedAt: z.string().nullable(), success: z.boolean().nullable(), processed: z.number(), failed: z.number() }).nullable(),
+});
+export type AppointmentAnalytics = z.infer<typeof AppointmentAnalyticsSchema>;
+export type AppointmentAnalyticsQuery = z.infer<typeof AppointmentAnalyticsQuerySchema>;
 export const CancellationActorSchema = z.object({ id: z.string().uuid(), name: z.string(), role: RoleSchema });
 export const CancellationSnapshotSchema = z.object({
   appointmentId: z.string().uuid(),
@@ -140,7 +195,7 @@ export const AppointmentStatusUpdateSchema = z.object({
 export const CreateClinicalRecordSchema = z.object({
   patientId: z.string().uuid(),
   appointmentId: z.string().uuid(),
-  notes: z.string().min(1, "Notas requeridas"),
+  notes: z.string().trim().min(1, "Notas requeridas").max(6000),
 });
 
 export const CompleteAppointmentSchema = z.object({
@@ -166,13 +221,13 @@ export const ReplaceWeeklyAvailabilitySchema = z.object({
 export const UpdateClinicSchema = z.object({
   name: z.string().min(1).optional(),
   address: z.string().optional(),
-  phone: z.string().optional(),
+  phone: ContactPhoneSchema.or(z.literal("")).optional(),
   generalHours: z.string().optional(),
   email: z.string().trim().pipe(z.union([
     z.string().email("Ingresa un correo electrónico válido."),
     z.literal(""),
   ])).optional(),
-  rut: z.string().optional(),
+  rut: z.string().trim().regex(/^(?:\d{11})?$/, "El RUC debe contener 11 dígitos").optional(),
   website: z.string().trim().pipe(z.union([
     z.string().url("Ingresa una URL válida para el sitio web, por ejemplo https://biodentis.com."),
     z.literal(""),
@@ -263,19 +318,13 @@ export const UpdateScheduleExceptionSchema = z.object({
   status: ExceptionStatusSchema.optional(),
 });
 
-export const PatientDniSchema = z.string().trim()
-  .regex(/^(?:\d{8})?$/, "El DNI debe contener exactamente 8 dígitos")
-  .transform((value) => value || null)
-  .nullable()
-  .optional();
-
 export const CreatePatientSchema = z.object({
-  email: z.string().email("Email inválido"),
-  password: z.string().min(8, "Mínimo 8 caracteres"),
-  firstName: z.string().min(1, "Nombre requerido"),
-  lastName: z.string().min(1, "Apellido requerido"),
+  email: z.string().trim().toLowerCase().email("Email inválido").or(z.literal("")).optional(),
+  password: z.string().min(8, "Mínimo 8 caracteres").or(z.literal("")).optional(),
+  firstName: z.string().trim().min(1, "Nombre requerido"),
+  lastName: z.string().trim().min(1, "Apellido requerido"),
   dni: PatientDniSchema,
-  phone: z.string().optional(),
+  phone: ContactPhoneSchema,
   address: z.string().optional(),
 });
 
@@ -284,7 +333,7 @@ export const UpdatePatientSchema = z.object({
   firstName: z.string().min(1, "Nombre requerido").optional(),
   lastName: z.string().min(1, "Apellido requerido").optional(),
   email: z.string().email("Email inválido").optional(),
-  phone: z.string().optional(),
+  phone: ContactPhoneSchema.or(z.literal("")).optional(),
   address: z.string().optional(),
   isActive: z.boolean().optional(),
   auditReason: z.string().min(15, "Mínimo 15 caracteres para auditoría").optional(),
@@ -308,27 +357,22 @@ export const ResetPasswordSchema = z.object({
 });
 
 // ─── Perfil (Mi Perfil) ────────────────────────────────────────
-const phoneField = z
-  .string()
-  .trim()
-  .min(6, "Teléfono demasiado corto")
-  .max(25, "Teléfono demasiado largo")
-  .regex(/^[+()\d\s-]+$/, "Teléfono inválido");
+const phoneField = ContactPhoneSchema;
 
 /**
  * Foto de perfil: o un data URL de imagen (el recorte que genera el navegador)
  * o una URL http(s) si algun dia se usa almacenamiento externo.
  *
- * El limite de 512 KB deja holgura sobre los ~20 KB que produce el recorte a
- * 256x256 e impide que alguien meta un archivo enorme en la fila del usuario.
+ * Permite un retrato de hasta 3 MiB codificado en Base64 sin recomprimirlo en
+ * el navegador. El JSON conserva margen bajo 4,5 MB; la BD guarda solo la URL.
  */
-const AVATAR_MAX_CHARS = 512 * 1024;
+const AVATAR_MAX_CHARS = 4 * 1024 * 1024 + 64;
 
 export const AvatarSchema = z
   .string()
   .max(AVATAR_MAX_CHARS, "La imagen es demasiado grande")
   .refine(
-    (value) => /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value) || /^https?:\/\//.test(value) || /^\/images\/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|webp)$/.test(value),
+    (value) => /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value) || /^https?:\/\//.test(value) || /^\/images\/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|webp)$/.test(value) || (value.startsWith("/api/uploads/") && ImagenStorageClaveSchema.safeParse(value.slice("/api/uploads/".length)).success),
     "Formato de imagen no válido"
   );
 
@@ -375,6 +419,8 @@ const professionalFields = {
 };
 
 export const CreateUserSchema = RegisterSchema.extend({
+  // El alta administrativa conserva la posibilidad de no informar documento.
+  dni: PatientDniSchema,
   role: RoleSchema,
   address: z.string().trim().max(200).optional(),
   avatarUrl: AvatarSchema.nullable().optional(),
@@ -384,7 +430,7 @@ export const CreateUserSchema = RegisterSchema.extend({
 export const UpdateUserSchema = z.object({
   firstName: z.string().trim().min(1, "Nombre requerido").optional(),
   lastName: z.string().trim().min(1, "Apellido requerido").optional(),
-  phone: z.string().max(40).nullable().optional(),
+  phone: ContactPhoneSchema.or(z.literal("")).nullable().optional(),
   address: z.string().trim().max(200).nullable().optional(),
   avatarUrl: AvatarSchema.nullable().optional(),
   role: RoleSchema.optional(),

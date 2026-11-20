@@ -7,7 +7,6 @@ import {
 } from "@biodentis/shared-validators"
 import type { AdminServiceCatalog } from "@biodentis/shared-types"
 import { DomainError, NotFoundError } from "@/lib/errors"
-import { AuditService } from "@/modules/audit/audit.service"
 import { CatalogAdminRepository } from "./catalog-admin.repository"
 
 const dentistName = (d: {
@@ -17,8 +16,7 @@ const dentistName = (d: {
 
 export class CatalogAdminService {
   constructor(
-    private readonly repository = new CatalogAdminRepository(),
-    private readonly audit = new AuditService()
+    private readonly repository = new CatalogAdminRepository()
   ) {}
 
   async list(): Promise<AdminServiceCatalog> {
@@ -72,15 +70,17 @@ export class CatalogAdminService {
     if (id) await this.specialty(id)
     if (await this.repository.duplicateName(parsed.name, id))
       throw new DomainError("Ya existe una especialidad con ese nombre.", 409)
-    const saved = await this.repository.saveSpecialty(parsed, id)
-    await this.audit.log(
-      actorId,
-      id ? "UPDATE" : "CREATE",
-      "Specialty",
-      saved.id,
-      JSON.stringify(parsed)
-    )
-    return saved
+    return this.repository.withTransaction(async (repository, audit) => {
+      const saved = await repository.saveSpecialty(parsed, id)
+      await audit.log(
+        actorId,
+        id ? "UPDATE" : "CREATE",
+        "Specialty",
+        saved.id,
+        JSON.stringify(parsed)
+      )
+      return saved
+    })
   }
 
   async state(id: string, data: unknown, actorId: string) {
@@ -96,14 +96,16 @@ export class CatalogAdminService {
         409
       )
     }
-    const saved = await this.repository.state(id, parsed.isActive)
-    await this.audit.log(
-      actorId,
-      parsed.isActive ? "ACTIVATE" : "DEACTIVATE",
-      "Specialty",
-      id
-    )
-    return saved
+    return this.repository.withTransaction(async (repository, audit) => {
+      const saved = await repository.state(id, parsed.isActive)
+      await audit.log(
+        actorId,
+        parsed.isActive ? "ACTIVATE" : "DEACTIVATE",
+        "Specialty",
+        id
+      )
+      return saved
+    })
   }
 
   async assign(id: string, data: unknown, actorId: string) {
@@ -114,15 +116,17 @@ export class CatalogAdminService {
     )
     if (dentistIds.some((id) => !eligible.has(id)))
       throw new DomainError("Selecciona odontólogos activos del sistema.")
-    await this.repository.assign(id, dentistIds)
-    await this.audit.log(
-      actorId,
-      "ASSIGN_DENTISTS",
-      "Specialty",
-      id,
-      JSON.stringify({ dentistIds })
-    )
-    return { success: true }
+    return this.repository.withTransaction(async (repository, audit) => {
+      await repository.assign(id, dentistIds)
+      await audit.log(
+        actorId,
+        "ASSIGN_DENTISTS",
+        "Specialty",
+        id,
+        JSON.stringify({ dentistIds })
+      )
+      return { success: true }
+    })
   }
 
   async saveService(
@@ -143,21 +147,23 @@ export class CatalogAdminService {
         "Ya existe un servicio con ese nombre en esta especialidad.",
         409
       )
-    const saved = await this.repository.saveService(
-      { ...parsed, specialtyId, category: specialty.name },
-      id
-    )
-    await this.audit.log(
-      actorId,
-      id ? "UPDATE" : "CREATE",
-      "Treatment",
-      saved.id,
-      JSON.stringify(parsed)
-    )
-    return {
-      ...saved,
-      price: saved.price === null ? null : Number(saved.price),
-    }
+    return this.repository.withTransaction(async (repository, audit) => {
+      const saved = await repository.saveService(
+        { ...parsed, specialtyId, category: specialty.name },
+        id
+      )
+      await audit.log(
+        actorId,
+        id ? "UPDATE" : "CREATE",
+        "Treatment",
+        saved.id,
+        JSON.stringify(parsed)
+      )
+      return {
+        ...saved,
+        price: saved.price === null ? null : Number(saved.price),
+      }
+    })
   }
 
   async serviceState(id: string, data: unknown, actorId: string) {
@@ -165,14 +171,16 @@ export class CatalogAdminService {
     const { isActive } = CatalogStateSchema.parse(data)
     if (!(await this.repository.findService(id)))
       throw new NotFoundError("Servicio no encontrado.")
-    await this.repository.serviceState(id, isActive)
-    await this.audit.log(
-      actorId,
-      isActive ? "ACTIVATE" : "DEACTIVATE",
-      "Treatment",
-      id
-    )
-    return { success: true }
+    return this.repository.withTransaction(async (repository, audit) => {
+      await repository.serviceState(id, isActive)
+      await audit.log(
+        actorId,
+        isActive ? "ACTIVATE" : "DEACTIVATE",
+        "Treatment",
+        id
+      )
+      return { success: true }
+    })
   }
 
   async requireBookable(id: string, dentistId: string) {

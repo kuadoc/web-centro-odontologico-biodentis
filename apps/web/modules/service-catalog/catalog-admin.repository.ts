@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
+import { AuditService } from "@/modules/audit/audit.service"
+import { AuditRepository } from "@/modules/audit/audit.repository"
 
 const eligibleDentist = { user: { isActive: true, role: "DENTIST" as const } }
 const dentistSelect = {
@@ -9,6 +11,11 @@ const dentistSelect = {
 
 export class CatalogAdminRepository {
   constructor(private readonly db: Prisma.TransactionClient = prisma) {}
+
+  withTransaction<T>(operation: (repository: CatalogAdminRepository, audit: AuditService) => Promise<T>) {
+    if (this.db !== prisma) return operation(this, new AuditService(new AuditRepository(this.db)))
+    return prisma.$transaction((tx) => operation(new CatalogAdminRepository(tx), new AuditService(new AuditRepository(tx))))
+  }
 
   list() {
     return this.db.specialty.findMany({

@@ -4,7 +4,7 @@ on:
   push:
     branches: [master, develop]
   pull_request:
-    branches: [master]
+    branches: [master, develop]
   workflow_dispatch:
 
 permissions:
@@ -19,9 +19,7 @@ jobs:
     name: Validar BIODENTIS
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
-    # Valores ficticios exclusivos para compilación y pruebas.
-    # No conectan con Supabase ni permiten enviar correos.
+    # Configuración ficticia: no conecta con Supabase ni envía correos.
     env:
       CI: "true"
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/biodentis_ci
@@ -31,52 +29,45 @@ jobs:
       CRON_SECRET: ci-only-cron-secret
       EMAIL_MODE: test
       EMAIL_TEST_RECIPIENT: ""
-      EMAIL_FROM: BIODENTIS <onboarding@resend.dev>
+      EMAIL_FROM: BIODENTIS <ci@example.test>
       FRONTEND_URL: http://localhost:3000
       STORAGE_DRIVER: local
       NEXT_TELEMETRY_DISABLED: "1"
       TURBO_TELEMETRY_DISABLED: "1"
-
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v6
         with:
           persist-credentials: false
-
       - name: Preparar pnpm
         uses: pnpm/action-setup@v4
-        # Usa la versión de packageManager en package.json.
-
       - name: Preparar Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
-
       - name: Validar esquema y generar Prisma
         run: |
           pnpm --filter web exec prisma validate
           pnpm --filter web exec prisma generate
-
-      - name: Compilar paquetes compartidos
+      - name: Compilar tipos compartidos
         run: pnpm --filter @biodentis/shared-types build
-
-      - name: Revisar tipos
-        run: pnpm typecheck
-
-      - name: Revisar ESLint
-        run: pnpm lint
-
+      - name: Revisar tipos y lint
+        run: |
+          pnpm typecheck
+          pnpm lint
       - name: Ejecutar pruebas sin servicios externos
         run: |
           pnpm --filter web test:dates
           pnpm --filter web test:patient-dni
           pnpm --filter web test:appointment-filters
-          pnpm --filter web exec node --require tsx/cjs --test tests/unit/email-policy.test.cts
-
+          pnpm --filter web test:auth-service
+          pnpm --filter web test:email
+          pnpm --filter web test:reports
+          pnpm --filter web test:storage
+          pnpm --filter web exec node --require tsx/cjs --test tests/unit/cron-routes.test.cts
       - name: Compilar producción
         run: pnpm exec turbo run build --force

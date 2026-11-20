@@ -138,7 +138,7 @@ export function AppointmentDetailDialog({ appointment, appointments, onClose }: 
               </div>
             </section>
 
-            {(user?.role === "DENTIST" || user?.role === "RECEPTIONIST") && appointment.status === "CONFIRMED" && !appointment.clinicalRecord && (
+            {user?.role === "DENTIST" && appointment.status === "CONFIRMED" && !appointment.clinicalRecord && (
               <ClinicalNoteForm key={appointment.id} appointmentId={appointment.id} onDone={onClose} />
             )}
 

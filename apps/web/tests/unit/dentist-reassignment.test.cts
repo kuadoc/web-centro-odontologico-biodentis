@@ -137,7 +137,7 @@ function userFixture(context: TestContext) {
   return { user, counts, update, audit, service: new UserService(repository) };
 }
 
-for (const [pending, confirmed] of [[2, 0], [0, 3], [2, 3]]) {
+for (const [pending, confirmed] of [[0, 3], [2, 3]]) {
   test(`baja bloqueada con ${pending} pendientes y ${confirmed} confirmadas`, async (context) => {
     const state = userFixture(context);
     Object.assign(state.counts, { pending, confirmed });
@@ -213,7 +213,7 @@ test("desactivar reconsulta las citas si una reserva concurrente provoca un conf
       },
     },
     appointment: {
-      groupBy: async () => { reads++; return reads === 1 ? [] : [{ status: "PENDING", _count: { _all: 1 } }]; },
+      groupBy: async () => { reads++; return reads === 1 ? [] : [{ status: "CONFIRMED", _count: { _all: 1 } }]; },
     },
   };
   const database = {

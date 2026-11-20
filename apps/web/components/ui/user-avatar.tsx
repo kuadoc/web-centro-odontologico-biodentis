@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { authenticatedFetch } from "@/lib/client-session";
 import { cn } from "@workspace/ui/lib/utils";
 
 const SIZES = {
@@ -40,7 +41,23 @@ export function UserAvatar({
   className,
 }: UserAvatarProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const showImage = Boolean(avatarUrl) && failedUrl !== avatarUrl;
+  const [privateImage, setPrivateImage] = useState<{ source: string; url: string } | null>(null);
+  const privateAvatar = Boolean(avatarUrl?.startsWith("/api/uploads/avatares/"));
+  useEffect(() => {
+    if (!privateAvatar || !avatarUrl) return;
+    let active = true;
+    let objectUrl: string | undefined;
+    void authenticatedFetch(avatarUrl).then(async (response) => {
+      if (!response.ok) throw new Error("No se pudo cargar el avatar");
+      const blob = await response.blob();
+      if (!active) return;
+      objectUrl = URL.createObjectURL(blob);
+      setPrivateImage({ source: avatarUrl, url: objectUrl });
+    }).catch(() => { if (active) setFailedUrl(avatarUrl); });
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [avatarUrl, privateAvatar]);
+  const imageUrl = privateAvatar ? (privateImage && privateImage.source === avatarUrl ? privateImage.url : null) : avatarUrl;
+  const showImage = Boolean(imageUrl) && failedUrl !== avatarUrl;
 
   return (
     <div
@@ -53,7 +70,7 @@ export function UserAvatar({
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={avatarUrl as string}
+          src={imageUrl as string}
           alt={`Foto de ${firstName ?? ""} ${lastName ?? ""}`.trim()}
           className="h-full w-full object-cover"
           onError={() => setFailedUrl(avatarUrl ?? null)}
