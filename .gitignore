@@ -67,3 +67,10 @@ apps/web/tests/e2e/evidencias/
 # Imágenes procesadas en disco; conservar solo el marcador de la carpeta.
 apps/web/uploads/*
 !apps/web/uploads/.gitkeep
+
+# Documentación interna: se conserva localmente, no se publica.
+/docs/
+/Biodentis-sprint-Hus.md
+
+# Credenciales locales de AWS.
+/.aws/
