@@ -6,6 +6,61 @@ import { DomainError } from "@/lib/errors";
 
 const input = { patientId: "patient", dentistId: "dentist", treatmentId: "service", date: new Date("2030-01-07"), startTime: "09:00", endTime: "09:45", status: "CONFIRMED" as const };
 
+for (const status of ["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED", "NO_SHOW"] as const) {
+  for (const newStatus of ["PENDING", "CONFIRMED"] as const) {
+    test(`cita anterior ${status}: límite del paciente al crear una cita ${newStatus}`, async () => {
+      let writes = 0;
+      let notices = 0;
+      let audits = 0;
+      // Otra fecha y otro profesional: el límite pertenece al paciente.
+      const previous = { id: "previous", patientId: input.patientId, dentistId: "other-dentist", date: new Date("2029-12-31"), status };
+      const tx = {
+        dentist: { findUnique: async () => ({ user: { role: "DENTIST", isActive: true } }) },
+        scheduleException: { findFirst: async () => null },
+        availability: { findMany: async () => [{ startTime: "08:00", endTime: "18:00" }] },
+        user: { findUnique: async () => ({ role: "PATIENT", isActive: true }) },
+        appointment: {
+          findFirst: async ({ where }: { where: { patientId?: string; status: { in?: string[] }; dentistId?: string; date?: Date } }) => {
+            if (where.patientId) {
+              assert.equal(where.dentistId, undefined);
+              assert.equal(where.date, undefined);
+              return where.patientId === previous.patientId && where.status.in?.includes(previous.status) ? { id: previous.id } : null;
+            }
+            return null;
+          },
+          create: async () => { writes++; return { id: "created", ...input, status: newStatus }; },
+        },
+        emailOutbox: { upsert: async () => { notices++; return {}; } },
+        auditLog: { create: async () => { audits++; return {}; } },
+      };
+      const database = { $transaction: async (operation: (client: typeof tx) => Promise<unknown>, options: unknown) => {
+        assert.deepEqual(options, { isolationLevel: "Serializable" });
+        return operation(tx);
+      } };
+      const repository = new AppointmentRepository(database as unknown as Pick<PrismaClient, "$transaction">);
+      const blocked = status === "PENDING" || status === "CONFIRMED";
+      const create = () => repository.create({ ...input, status: newStatus }, "receptionist");
+      if (blocked) {
+        await assert.rejects(create(), (error: unknown) => {
+          assert.ok(error instanceof DomainError);
+          assert.equal(error.statusCode, 409);
+          assert.equal(error.message, "Aún tienes una cita pendiente de atención. Podrás agendar una nueva cuando se complete la anterior.");
+          return true;
+        });
+      } else {
+        assert.equal((await create()).id, "created");
+      }
+      assert.equal(writes, blocked ? 0 : 1);
+      assert.equal(notices, blocked ? 0 : 1);
+      assert.equal(audits, blocked ? 0 : 1);
+      if (blocked) {
+        // La cita del primer paciente no impide reservar para otra persona.
+        assert.equal((await repository.create({ ...input, patientId: "another-patient", status: newStatus })).id, "created");
+      }
+    });
+  }
+}
+
 for (const patient of [null, { role: "PATIENT", isActive: false }, { role: "ADMIN", isActive: true }]) {
   test(`no reserva para un paciente inexistente, desactivado o de otro rol: ${JSON.stringify(patient)}`, async () => {
     let writes = 0;

@@ -100,6 +100,15 @@ export class AppointmentRepository {
       if (!patient || patient.role !== "PATIENT" || !patient.isActive) {
         throw new DomainError("El paciente seleccionado no existe o su cuenta está inactiva. Actualiza la lista y selecciona un paciente activo.", 409);
       }
+      // La lectura y la creación comparten aislamiento serializable: un reintento
+      // debe volver a comprobar el límite incluso si se reserva con otro odontólogo.
+      const unattended = await tx.appointment.findFirst({
+        where: { patientId: data.patientId, status: { in: ["PENDING", "CONFIRMED"] } },
+        select: { id: true },
+      });
+      if (unattended) {
+        throw new DomainError("Aún tienes una cita pendiente de atención. Podrás agendar una nueva cuando se complete la anterior.", 409);
+      }
       const appointment = await tx.appointment.create({ data });
       await new EmailOutboxRepository(tx).enqueue(appointment.id, "BOOKING");
       if (actorId) await new AuditService(new AuditRepository(tx)).log(actorId, "CREATE_CONFIRMED_APPOINTMENT", "Appointment", appointment.id, JSON.stringify({ patientId: data.patientId, dentistId: data.dentistId, treatmentId: data.treatmentId, date: data.date.toISOString().slice(0, 10), startTime: data.startTime, endTime: data.endTime, status: data.status }));
