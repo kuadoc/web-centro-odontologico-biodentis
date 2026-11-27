@@ -10,7 +10,7 @@ import { AvailabilityService } from "@/modules/availability/availability.service
 import { CatalogAdminService } from "@/modules/service-catalog/catalog-admin.service";
 import { PatientService } from "@/modules/patients/patient.service";
 import { UserService } from "@/modules/users/user.service";
-import { ScheduleConflictError } from "@/lib/errors";
+import { DomainError, ScheduleConflictError } from "@/lib/errors";
 
 process.env.JWT_ACCESS_SECRET = "reception-booking-test-secret";
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- Configurar JWT antes de cargar las rutas.
@@ -46,6 +46,19 @@ function booking(context: TestContext) {
   context.mock.method(AppointmentRepository.prototype, "findConflicting", async () => null);
   const save = context.mock.method(AppointmentRepository.prototype, "create", async (data: unknown) => ({ id: randomUUID(), ...(data as Record<string, unknown>) }));
   return { save, notice };
+}
+
+for (const role of [Role.PATIENT, Role.RECEPTIONIST, Role.ADMIN]) {
+  test(`cita pendiente como ${role}: devuelve el mensaje acordado y no envía correo`, async (context) => {
+    session(context, role);
+    const { save, notice } = booking(context);
+    const message = "Aún tienes una cita pendiente de atención. Podrás agendar una nueva cuando se complete la anterior.";
+    save.mock.mockImplementation(async () => { throw new DomainError(message, 409); });
+    const response = await appointments.POST(request("appointments", payload));
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { error: message });
+    assert.equal(notice.mock.callCount(), 0);
+  });
 }
 
 for (const role of [Role.RECEPTIONIST, Role.PATIENT, Role.ADMIN]) {

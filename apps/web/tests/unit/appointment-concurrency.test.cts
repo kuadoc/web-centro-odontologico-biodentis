@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { AppointmentRepository } from "@/modules/appointments/appointment.repository";
-import { NotFoundError, ScheduleConflictError } from "@/lib/errors";
+import { DomainError, NotFoundError, ScheduleConflictError } from "@/lib/errors";
 
 // Se inyecta un ejecutor falso: estas pruebas nunca abren una conexión a la BD.
 const database = { $transaction: async () => { throw new Error("Transacción sin simular"); } };
@@ -48,6 +48,9 @@ test("reserva: comprueba solapamientos y guarda en la misma transacción seriali
       status: { not: "CANCELLED" },
     },
     select: { id: true },
+  }, {
+    where: { patientId: "patient", status: { in: ["PENDING", "CONFIRMED"] } },
+    select: { id: true },
   }]);
 });
 
@@ -60,14 +63,45 @@ test("un conflicto concurrente reintenta la lectura y rechaza el horario ocupado
     dentist: { findUnique: async () => ({ user: { isActive: true, role: "DENTIST" } }) },
     availability: { findMany: async () => [{ startTime: "08:00", endTime: "18:00" }] },
     appointment: {
-      findFirst: async () => ++reads === 1 ? null : { id: "other-reservation" },
+      findFirst: async () => ++reads <= 2 ? null : { id: "other-reservation" },
       create: async () => { writes++; throw databaseError("P2034"); },
     },
   };
   const attempt = context.mock.method(database, "$transaction", async (operation: (tx: typeof transaction) => Promise<unknown>) => operation(transaction));
   await assert.rejects(repository().create(reservation), ScheduleConflictError);
   assert.equal(attempt.mock.callCount(), 2);
-  assert.equal(reads, 2);
+  assert.equal(reads, 3);
+  assert.equal(writes, 1);
+});
+
+test("una reserva concurrente del mismo paciente con otro odontólogo se rechaza al reintentar", async (context) => {
+  let patientReads = 0;
+  let writes = 0;
+  const transaction = {
+    scheduleException: { findFirst: async () => null },
+    user: { findUnique: async () => ({ role: "PATIENT", isActive: true }) },
+    dentist: { findUnique: async () => ({ user: { isActive: true, role: "DENTIST" } }) },
+    availability: { findMany: async () => [{ startTime: "08:00", endTime: "18:00" }] },
+    appointment: {
+      findFirst: async (query: { where: { patientId?: string } }) => {
+        if (!query.where.patientId) return null;
+        return ++patientReads === 1 ? null : { id: "concurrent-appointment" };
+      },
+      create: async () => { writes++; throw databaseError("P2034"); },
+    },
+  };
+  const attempt = context.mock.method(database, "$transaction", async (operation: (tx: typeof transaction) => Promise<unknown>, options: unknown) => {
+    assert.deepEqual(options, { isolationLevel: "Serializable" });
+    return operation(transaction);
+  });
+  await assert.rejects(repository().create(reservation), (error: unknown) => {
+    assert.ok(error instanceof DomainError);
+    assert.equal(error.statusCode, 409);
+    assert.equal(error.message, "Aún tienes una cita pendiente de atención. Podrás agendar una nueva cuando se complete la anterior.");
+    return true;
+  });
+  assert.equal(attempt.mock.callCount(), 2);
+  assert.equal(patientReads, 2);
   assert.equal(writes, 1);
 });
 
